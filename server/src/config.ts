@@ -83,6 +83,8 @@ export const config = {
     allowVideoFileSource: optional('ALLOW_VIDEO_FILE_SOURCE', 'false') === 'true',
     // Shared secret the media worker uses to call the API's internal ingest.
     workerToken: optional('MEDIA_WORKER_TOKEN', 'dev-media-worker-token'),
+    // How the media worker reaches the API (internal network URL).
+    apiBaseUrl: optional('MEDIA_API_BASE_URL', 'http://localhost:4000'),
   },
 
   inference: {
