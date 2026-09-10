@@ -42,12 +42,19 @@ aiRulesRouter.post(
       // Camera must belong to this org.
       await requireTenantResource(db, 'cameras', input.cameraId);
       if (input.zoneId) await requireTenantResource(db, 'zones', input.zoneId);
+      if (input.aiModelId) await requireTenantResource(db, 'ai_models', input.aiModelId);
       const r = await db.query(
-        `INSERT INTO ai_rules(organization_id, camera_id, zone_id, rule_type, enabled, min_confidence, severity, config)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [org, input.cameraId, input.zoneId ?? null, input.ruleType, input.enabled, input.minConfidence, input.severity, JSON.stringify(input.config)],
+        `INSERT INTO ai_rules(organization_id, camera_id, zone_id, rule_type, enabled, min_confidence, severity, config,
+                              cooldown_seconds, min_duration_ms, notify_channels, ai_model_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                 COALESCE($9, 30), COALESCE($10, 0), COALESCE($11::notify_channel[], '{}'::notify_channel[]), $12)
+         RETURNING *`,
+        [
+          org, input.cameraId, input.zoneId ?? null, input.ruleType, input.enabled, input.minConfidence, input.severity, JSON.stringify(input.config),
+          input.cooldownSeconds ?? null, input.minDurationMs ?? null, input.notifyChannels ?? null, input.aiModelId ?? null,
+        ],
       );
-      await audit(db, org, { action: 'ai_rule.create', resource: 'ai_rule', resourceId: r.rows[0]!.id as string, ip: req.ip });
+      await audit(db, org, { action: 'ai_rule.create', resource: 'ai_rule', resourceId: r.rows[0]!.id as string, metadata: { ruleType: input.ruleType, severity: input.severity }, ip: req.ip });
       return r.rows[0];
     });
     res.status(201).json({ rule: row });
@@ -59,17 +66,25 @@ aiRulesRouter.patch(
   requirePermission('airules:write'),
   asyncHandler(async (req, res) => {
     const input = aiRuleSchema.partial().parse(req.body);
+    const org = getCurrentOrganization(req);
     await tenantDb(req, async (db) => {
       await requireTenantResource(db, 'ai_rules', req.params.id!);
       await db.query(
         `UPDATE ai_rules SET
            enabled = COALESCE($2, enabled),
            min_confidence = COALESCE($3, min_confidence),
-           severity = COALESCE($4, severity),
+           severity = COALESCE($4::event_severity, severity),
+           cooldown_seconds = COALESCE($5, cooldown_seconds),
+           min_duration_ms = COALESCE($6, min_duration_ms),
+           notify_channels = COALESCE($7::notify_channel[], notify_channels),
            updated_at = now()
          WHERE id = $1`,
-        [req.params.id, input.enabled ?? null, input.minConfidence ?? null, input.severity ?? null],
+        [
+          req.params.id, input.enabled ?? null, input.minConfidence ?? null, input.severity ?? null,
+          input.cooldownSeconds ?? null, input.minDurationMs ?? null, input.notifyChannels ?? null,
+        ],
       );
+      await audit(db, org, { action: 'ai_rule.update', resource: 'ai_rule', resourceId: req.params.id!, metadata: { changed: Object.keys(input) }, ip: req.ip });
     });
     const row = await tenantDb(req, (db) => requireTenantResource(db, 'ai_rules', req.params.id!));
     res.json({ rule: row });

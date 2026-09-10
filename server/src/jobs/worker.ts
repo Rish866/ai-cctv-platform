@@ -3,6 +3,9 @@ import { buildEvidenceKey, putObject } from '../services/storage.service.js';
 import { dispatchNotifications } from '../services/notification.service.js';
 import { publishTenantEvent } from '../realtime/hub.js';
 import { notFound } from '../lib/errors.js';
+import type { AiEventType, EventSeverity } from '../ai/types.js';
+import { isSafetySecurityType } from '../ai/types.js';
+import { processDetection } from '../ai/engine.js';
 
 /**
  * Background job payload for the AI pipeline. Every job MUST carry full tenant
@@ -14,18 +17,12 @@ import { notFound } from '../lib/errors.js';
 export interface AiJob {
   organizationId: string;
   cameraId: string;
-  eventType:
-    | 'PERSON_DETECTION'
-    | 'VEHICLE_DETECTION'
-    | 'RESTRICTED_AREA_INTRUSION'
-    | 'LINE_CROSSING'
-    | 'LOITERING'
-    | 'CROWD_DETECTION'
-    | 'HELMET_DETECTION'
-    | 'SAFETY_VEST_DETECTION';
+  // Accepts all AI event types, incl. the safety/security add-on values.
+  eventType: AiEventType;
   confidence: number;
-  severity?: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  severity?: EventSeverity;
   correlationId?: string;
+  durationMs?: number;
   snapshot?: Buffer;
   metadata?: Record<string, unknown>;
 }
@@ -56,6 +53,23 @@ export async function processAiJob(job: AiJob): Promise<JobResult> {
       if (!camera) {
         // Camera not visible under this org's RLS => cross-tenant / invalid job.
         throw notFound('Job references a camera not owned by its organization');
+      }
+
+      // Safety & Security jobs use the detection engine (cooldown/correlation),
+      // still fully tenant-validated (camera confirmed above under RLS).
+      if (isSafetySecurityType(job.eventType)) {
+        const result = await processDetection(db, {
+          organizationId: job.organizationId,
+          cameraId: camera.id,
+          siteId: camera.site_id,
+          eventType: job.eventType,
+          confidence: job.confidence,
+          severity: job.severity,
+          durationMs: job.durationMs,
+          metadata: job.metadata,
+          snapshot: job.snapshot,
+        });
+        return { eventId: result.eventId, organizationId: job.organizationId, cameraId: camera.id, notified: result.notified };
       }
 
       const severity = job.severity ?? 'MEDIUM';

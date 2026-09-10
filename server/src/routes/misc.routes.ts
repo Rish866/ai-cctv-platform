@@ -51,6 +51,40 @@ dashboardRouter.get(
   }),
 );
 
+/**
+ * Safety & Security dashboard widgets (ADD-ON). Separate endpoint so the
+ * existing dashboard is untouched. All counts are tenant-scoped (RLS) and
+ * cached under a tenant-namespaced key.
+ */
+dashboardRouter.get(
+  '/security',
+  requirePermission('events:read'),
+  asyncHandler(async (req, res) => {
+    const org = getCurrentOrganization(req);
+    const cached = cacheGet(org, 'dashboard_security');
+    if (cached) {
+      res.json({ stats: cached, cached: true });
+      return;
+    }
+    const stats = await tenantDb(req, async (db) => {
+      const r = await db.query<Record<string, number>>(
+        `SELECT
+          (SELECT count(*) FROM events WHERE event_type IN ('FIRE','FIRE_AND_SMOKE') AND occurred_at >= date_trunc('day', now()))::int AS fire_today,
+          (SELECT count(*) FROM events WHERE event_type IN ('SMOKE','FIRE_AND_SMOKE') AND occurred_at >= date_trunc('day', now()))::int AS smoke_today,
+          (SELECT count(*) FROM events WHERE event_type IN ('UNAUTHORIZED_ENTRY','AFTER_HOURS_ACTIVITY','OBJECT_REMOVED','LOITERING_SECURITY','UNAUTHORIZED_VEHICLE','RESTRICTED_ZONE_ACTIVITY') AND occurred_at >= date_trunc('day', now()))::int AS security_today,
+          (SELECT count(*) FROM events WHERE event_type = 'UNAUTHORIZED_ENTRY')::int AS unauthorized_entry,
+          (SELECT count(*) FROM events WHERE event_type = 'AFTER_HOURS_ACTIVITY')::int AS after_hours,
+          (SELECT count(*) FROM events WHERE event_type IN ('OBJECT_REMOVED','UNAUTHORIZED_VEHICLE','LOITERING_SECURITY','RESTRICTED_ZONE_ACTIVITY'))::int AS potential_theft,
+          (SELECT count(*) FROM events WHERE severity = 'CRITICAL')::int AS critical_incidents,
+          (SELECT count(*) FROM events WHERE status IN ('OPEN','ACKNOWLEDGED','INVESTIGATING'))::int AS open_incidents`,
+      );
+      return r.rows[0];
+    });
+    cacheSet(org, 'dashboard_security', stats, 15);
+    res.json({ stats, cached: false });
+  }),
+);
+
 // ---- Search (tenant scoped: only the current org's data) ----
 export const searchRouter = Router();
 searchRouter.use(requireAuth, requireOrganizationMembership);

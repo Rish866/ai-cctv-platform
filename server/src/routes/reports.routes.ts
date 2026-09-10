@@ -71,6 +71,65 @@ reportsRouter.get(
   }),
 );
 
+/** Fire & Safety report (ADD-ON) — tenant scoped analytics for fire/smoke. */
+reportsRouter.get(
+  '/fire-safety/data',
+  requirePermission('reports:read'),
+  asyncHandler(async (req, res) => {
+    const data = await tenantDb(req, async (db) => {
+      const totals = (await db.query(
+        `SELECT
+           (SELECT count(*) FROM events WHERE event_type = 'FIRE')::int AS fire_events,
+           (SELECT count(*) FROM events WHERE event_type = 'SMOKE')::int AS smoke_events,
+           (SELECT count(*) FROM events WHERE event_type = 'FIRE_AND_SMOKE')::int AS fire_and_smoke_events,
+           (SELECT count(*) FROM events WHERE event_type IN ('FIRE','SMOKE','FIRE_AND_SMOKE') AND severity = 'CRITICAL')::int AS critical_incidents,
+           (SELECT count(*) FROM events WHERE event_type IN ('FIRE','SMOKE','FIRE_AND_SMOKE') AND status IN ('RESOLVED','FALSE_POSITIVE'))::int AS resolved`,
+      )).rows[0];
+      const byCamera = (await db.query(
+        `SELECT c.name AS camera, count(*)::int AS count
+         FROM events e JOIN cameras c ON c.id = e.camera_id
+         WHERE e.event_type IN ('FIRE','SMOKE','FIRE_AND_SMOKE')
+         GROUP BY c.name ORDER BY count DESC`,
+      )).rows;
+      const bySite = (await db.query(
+        `SELECT s.name AS site, count(*)::int AS count
+         FROM events e JOIN sites s ON s.id = e.site_id
+         WHERE e.event_type IN ('FIRE','SMOKE','FIRE_AND_SMOKE')
+         GROUP BY s.name ORDER BY count DESC`,
+      )).rows;
+      return { totals, byCamera, bySite };
+    });
+    res.json(data);
+  }),
+);
+
+/** Security report (ADD-ON) — tenant scoped analytics for security events. */
+reportsRouter.get(
+  '/security/data',
+  requirePermission('reports:read'),
+  asyncHandler(async (req, res) => {
+    const data = await tenantDb(req, async (db) => {
+      const totals = (await db.query(
+        `SELECT
+           (SELECT count(*) FROM events WHERE event_type = 'UNAUTHORIZED_ENTRY')::int AS unauthorized_entries,
+           (SELECT count(*) FROM events WHERE event_type = 'AFTER_HOURS_ACTIVITY')::int AS after_hours,
+           (SELECT count(*) FROM events WHERE event_type = 'OBJECT_REMOVED')::int AS object_removed,
+           (SELECT count(*) FROM events WHERE event_type = 'UNAUTHORIZED_VEHICLE')::int AS unauthorized_vehicle,
+           (SELECT count(*) FROM events WHERE event_type IN ('RESTRICTED_ZONE_ACTIVITY','LOITERING_SECURITY'))::int AS restricted_zone,
+           (SELECT count(*) FROM events WHERE event_type IN ('UNAUTHORIZED_ENTRY','AFTER_HOURS_ACTIVITY','OBJECT_REMOVED','UNAUTHORIZED_VEHICLE','RESTRICTED_ZONE_ACTIVITY','LOITERING_SECURITY') AND status IN ('RESOLVED','FALSE_POSITIVE'))::int AS resolved`,
+      )).rows[0];
+      const bySite = (await db.query(
+        `SELECT s.name AS site, count(*)::int AS count
+         FROM events e JOIN sites s ON s.id = e.site_id
+         WHERE e.event_type IN ('UNAUTHORIZED_ENTRY','AFTER_HOURS_ACTIVITY','OBJECT_REMOVED','UNAUTHORIZED_VEHICLE','RESTRICTED_ZONE_ACTIVITY','LOITERING_SECURITY')
+         GROUP BY s.name ORDER BY count DESC`,
+      )).rows;
+      return { totals, bySite };
+    });
+    res.json(data);
+  }),
+);
+
 /** CSV export — tenant scoped. Only the current org's events are exported. */
 reportsRouter.get(
   '/export/events.csv',

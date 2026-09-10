@@ -20,6 +20,7 @@ import { membersRouter } from './routes/members.routes.js';
 import { auditRouter, dashboardRouter, searchRouter } from './routes/misc.routes.js';
 import { storageRouter, streamsRouter } from './routes/storage.routes.js';
 import { platformRouter } from './routes/platform.routes.js';
+import { aiModelsRouter, monitoredObjectsRouter, schedulesRouter } from './routes/safety.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -76,6 +77,9 @@ export function createApp(): Express {
   app.use('/api/zones', zonesRouter);
   app.use('/api/cameras', camerasRouter);
   app.use('/api/ai-rules', aiRulesRouter);
+  app.use('/api/ai-models', aiModelsRouter);
+  app.use('/api/zone-schedules', schedulesRouter);
+  app.use('/api/monitored-objects', monitoredObjectsRouter);
   app.use('/api/events', eventsRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/reports', reportsRouter);

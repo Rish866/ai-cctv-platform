@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AI_MODEL_TYPES, ALL_AI_TYPES, NOTIFY_CHANNELS } from '../ai/types.js';
 
 export const uuid = z.string().uuid();
 
@@ -45,32 +46,35 @@ export const cameraSchema = z.object({
 
 export const cameraUpdateSchema = cameraSchema.partial();
 
+// All AI rule/event types (base 8 + safety/security add-on). Single source of
+// truth lives in ai/types.ts.
+const aiTypeEnum = z.enum(ALL_AI_TYPES);
+const notifyChannelEnum = z.enum(NOTIFY_CHANNELS);
+
 export const aiRuleSchema = z.object({
   cameraId: uuid,
   zoneId: uuid.optional().nullable(),
-  ruleType: z.enum([
-    'PERSON_DETECTION',
-    'VEHICLE_DETECTION',
-    'RESTRICTED_AREA_INTRUSION',
-    'LINE_CROSSING',
-    'LOITERING',
-    'CROWD_DETECTION',
-    'HELMET_DETECTION',
-    'SAFETY_VEST_DETECTION',
-  ]),
+  ruleType: aiTypeEnum,
   enabled: z.boolean().default(true),
   minConfidence: z.number().min(0).max(1).default(0.5),
   severity: z.enum(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
+  // Add-on config (all optional + backward compatible).
+  cooldownSeconds: z.number().int().min(0).max(86400).optional(),
+  minDurationMs: z.number().int().min(0).max(600000).optional(),
+  notifyChannels: z.array(notifyChannelEnum).optional(),
+  aiModelId: uuid.optional().nullable(),
   config: z.record(z.string(), z.unknown()).default({}),
 });
 
+// Incident workflow statuses (extends the original 4 with INVESTIGATING /
+// FALSE_POSITIVE). Existing callers passing the original values keep working.
 export const eventStatusSchema = z.object({
-  status: z.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'DISMISSED']),
+  status: z.enum(['OPEN', 'ACKNOWLEDGED', 'INVESTIGATING', 'RESOLVED', 'DISMISSED', 'FALSE_POSITIVE']),
 });
 
 export const notificationRuleSchema = z.object({
   name: z.string().min(1).max(200),
-  channel: z.enum(['EMAIL', 'SMS', 'WEBHOOK', 'IN_APP']),
+  channel: notifyChannelEnum,
   target: z.string().min(1).max(500),
   minSeverity: z.enum(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('HIGH'),
   enabled: z.boolean().default(true),
@@ -96,23 +100,48 @@ export const searchSchema = z.object({
   q: z.string().min(1).max(200),
 });
 
-// Simulated AI event ingestion (represents the AI worker -> rule engine step).
+// AI event ingestion (represents the AI worker -> rule engine step). Now accepts
+// all AI types including the new safety/security ones. Fully backward compatible.
 export const ingestEventSchema = z.object({
   cameraId: uuid,
-  eventType: z.enum([
-    'PERSON_DETECTION',
-    'VEHICLE_DETECTION',
-    'RESTRICTED_AREA_INTRUSION',
-    'LINE_CROSSING',
-    'LOITERING',
-    'CROWD_DETECTION',
-    'HELMET_DETECTION',
-    'SAFETY_VEST_DETECTION',
-  ]),
+  eventType: aiTypeEnum,
   confidence: z.number().min(0).max(1),
   severity: z.enum(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   correlationId: z.string().max(200).optional(),
+  durationMs: z.number().int().min(0).max(600000).optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
   // Optional evidence payload (base64) — a snapshot from the camera.
   snapshotBase64: z.string().optional(),
+});
+
+// ---- Add-on: safety/security configuration schemas ----
+export const zoneScheduleSchema = z.object({
+  zoneId: uuid,
+  weekday: z.number().int().min(0).max(6).nullable().optional(),
+  openMinute: z.number().int().min(0).max(1440).default(540),
+  closeMinute: z.number().int().min(0).max(1440).default(1080),
+  timezone: z.string().max(64).default('UTC'),
+});
+
+export const monitoredObjectSchema = z.object({
+  cameraId: uuid,
+  zoneId: uuid.optional().nullable(),
+  label: z.string().min(1).max(200),
+  region: z.record(z.string(), z.unknown()).default({}),
+  confirmMs: z.number().int().min(0).max(600000).default(3000),
+});
+
+export const aiModelSchema = z.object({
+  modelType: z.enum(AI_MODEL_TYPES),
+  name: z.string().min(1).max(200),
+  version: z.string().max(64).default('v1'),
+  backendRef: z.string().max(300).optional().nullable(),
+  confidenceThreshold: z.number().min(0).max(1).default(0.7),
+  isDemoAdapter: z.boolean().default(false),
+  enabled: z.boolean().default(true),
+  config: z.record(z.string(), z.unknown()).default({}),
+});
+
+export const incidentNoteSchema = z.object({
+  note: z.string().min(1).max(4000),
 });

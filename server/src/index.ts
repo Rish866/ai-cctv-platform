@@ -4,10 +4,18 @@ import { createApp } from './app.js';
 import { attachWebSockets } from './realtime/ws.js';
 import { runMigrations } from './db/migrate.js';
 import { closePools } from './db/pool.js';
+import { registerDemoAdapters } from './ai/model.js';
 
 async function main(): Promise<void> {
   // Ensure schema is up to date on boot.
   await runMigrations();
+
+  // Register the explicitly-labelled DEMO AI adapters unless running in
+  // production. Production deployments register real inference adapters instead
+  // (see server/src/ai/model.ts). Demo adapters never masquerade as production.
+  if (config.env !== 'production') {
+    registerDemoAdapters();
+  }
 
   const app = createApp();
   const server = createServer(app);

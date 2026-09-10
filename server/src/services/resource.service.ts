@@ -26,6 +26,12 @@ const TENANT_TABLES = new Set([
   'invoices',
   'audit_logs',
   'organization_members',
+  // Safety & Security add-on tenant tables.
+  'ai_models',
+  'zone_schedules',
+  'monitored_objects',
+  'incident_notes',
+  'alert_cooldowns',
 ]);
 
 export async function requireTenantResource<R extends Record<string, unknown>>(
