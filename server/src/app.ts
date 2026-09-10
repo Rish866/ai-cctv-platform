@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -86,6 +89,18 @@ export function createApp(): Express {
   app.use('/api/platform', platformRouter);
 
   app.use('/api', notFoundHandler);
+
+  // Serve the built frontend (single deployable unit) if present. The SPA
+  // fallback returns index.html for non-API routes so client routing works.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const webDist = resolve(here, '../../web/dist');
+  if (existsSync(webDist)) {
+    app.use(express.static(webDist));
+    app.get(/^(?!\/api).*/, (_req, res) => {
+      res.sendFile(join(webDist, 'index.html'));
+    });
+  }
+
   app.use(errorHandler);
 
   return app;
