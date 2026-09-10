@@ -298,3 +298,131 @@ through the detection engine (camera ownership re-validated under RLS first).
 Never commit real secrets. `.env` is git-ignored; use `.env.example` as a
 template. Camera credentials, storage credentials, session/encryption/signing
 keys and DB passwords all come from environment variables.
+
+
+---
+
+## Real CCTV / RTSP + production AI inference (add-on)
+
+SentriAI can connect to a real IP camera/NVR over RTSP, continuously ingest
+frames, run **real** computer-vision inference, and drive the existing event →
+evidence → notification → dashboard pipeline — all tenant-isolated. This is an
+additive layer; nothing in the existing platform changed.
+
+### Architecture
+
+```
+IP camera / NVR ──RTSP──▶ Media worker (FFmpeg)
+                            ├─ frame sampler (inference_fps)
+                            └─ RTSP→HLS transcode (on demand)
+   frames ──▶ Inference service (FastAPI + OpenCV/ONNX)  ──detections──▶
+   Media worker ──POST /api/internal/detections (worker token)──▶ API
+     └─ rule engine (zone/schedule/tracking) ─▶ processDetection
+        └─ event ─▶ evidence (private, signed URL) ─▶ notification ─▶ WebSocket ─▶ dashboard
+   Browser ──GET /api/cameras/:id/live──▶ authorized HLS (never RTSP/credentials)
+```
+
+Three separate processes: **API** (`server/dist/index.js`), **media worker**
+(`server/dist/media-worker.entry.js`), **inference service**
+(`inference-service/`). Heavy FFmpeg/CV work never blocks the API.
+
+### Security invariants (new surface)
+- **RTSP credentials** are encrypted at rest, decrypted only server-side inside
+  the media/HLS path, redacted in every log (`rtsp://user:***@host`), and never
+  returned to the browser, put in WebSocket payloads, or embedded in stream URLs.
+- **Live streaming** is HLS only; the browser gets a short-lived **signed**
+  manifest URL. Manifest/segment requests re-verify authentication + org
+  membership + camera ownership (RLS) + signature. HLS output is written to a
+  private, org-namespaced directory.
+- **Internal media-worker API** (`/api/internal/*`) requires a bearer worker
+  token AND still validates every job's `organizationId`/`cameraId` under RLS —
+  the token grants no cross-tenant power. A forged job (org A + camera B) returns
+  404 and creates nothing.
+- New tenant tables (`camera_health_events`, `inference_stats`) have
+  `organization_id NOT NULL` + FORCE RLS + 4 policies, like everything else.
+
+### No fake production AI
+- The inference service performs **real** analysis: OpenCV HOG people detection,
+  a classical HSV/segmentation fire/smoke detector, and an optional ONNX
+  object-detection backend. It never fabricates or randomly generates detections.
+- The Node `ProductionInferenceAdapter` fails **closed**: if the service is
+  unreachable/times out/returns malformed data, the pipeline reports
+  `INFERENCE_UNAVAILABLE` — it never invents a detection and never silently falls
+  back to the demo adapter.
+- In **production** the demo adapter is disabled and the API **refuses to start**
+  without `INFERENCE_SERVICE_URL`. The UI shows the real mode: **AI Active**
+  (production adapter reachable), **Demo AI** (dev/test only), or **Inference
+  Offline** — sourced from backend state, never hardcoded.
+
+### Run the full stack with Docker
+
+```bash
+cp .env.example .env    # set SESSION_SECRET, CREDENTIAL_ENCRYPTION_KEY,
+                        # STORAGE_URL_SIGNING_KEY, MEDIA_WORKER_TOKEN (openssl rand -hex 32)
+docker compose up --build
+# API + web UI on http://localhost:4000  (inference + worker stay on the private network)
+```
+
+Services: `db` (Postgres, creates the `sentriai_app` NOBYPASSRLS role),
+`inference` (FastAPI CV service), `api` (API + built SPA), `media-worker`.
+For GPU inference, install the NVIDIA container toolkit and uncomment the `deploy`
+block under the `inference` service; supply a trained detection model via
+`ONNX_MODEL_PATH` + `ONNX_LABELS`.
+
+### Run locally without Docker (dev)
+
+```bash
+# 1) DB + migrate + seed (see the earlier Testing section for the ephemeral harness)
+npm run db:migrate && npm run db:seed
+# 2) Inference service (real CV)
+cd inference-service && python -m venv .venv && . .venv/bin/activate \
+  && pip install -r requirements.txt && uvicorn app.main:app --port 8100
+# 3) API  (set INFERENCE_SERVICE_URL=http://localhost:8100 in .env)
+npm run dev:server
+# 4) Media worker
+npm --workspace server run dev:media-worker
+# 5) Web
+npm run dev:web
+```
+
+### Connect a real IP camera (step by step)
+
+1. **Find the RTSP URL.** Consult your camera/NVR manual — the path varies by
+   manufacturer, e.g. Hikvision `/Streaming/Channels/101`, Dahua
+   `/cam/realmonitor?channel=1&subtype=0`, generic `/stream1`. Format:
+   `rtsp://USERNAME:PASSWORD@CAMERA_IP:554/STREAM_PATH` (placeholders only — never
+   commit a real password).
+2. **Create the camera** in SentriAI (Cameras → Add camera): name, site, RTSP
+   host/IP, port, path, stream profile, username, password, and optionally enable
+   AI inference + set inference FPS.
+3. **Test connection** — click *Test*. The server probes the RTSP stream with
+   ffprobe and shows a safe result (`CONNECTED` + latency/resolution, or
+   `AUTH_FAILED` / `UNREACHABLE` / `INVALID_STREAM`). Credentials are never shown.
+4. **Start the media worker** (Docker service, or `dev:media-worker`). It picks
+   up enabled cameras, samples frames at `inference_fps`, and runs inference.
+5. **Ensure the inference service is running** (Docker service, or step 2 above).
+   The Live Monitoring page shows **AI Active** when it's reachable.
+6. **View the live stream** — open Live Monitoring and click a camera tile. The
+   browser plays authorized HLS (via hls.js / native). The RTSP URL never reaches
+   the browser.
+7. **Generate a real event** — walk into view / trigger a monitored condition;
+   the worker's detections flow through the rule engine into events + evidence.
+8. **View evidence** — open the event; evidence loads via a short-lived signed
+   URL. **Receive alerts** — configure notification rules (Alerts page); matching
+   events dispatch to your org's recipients only.
+
+### Local test camera (no physical CCTV)
+
+For development/testing without hardware, set `ALLOW_VIDEO_FILE_SOURCE=true` and
+create a camera with `sourceKind=VIDEO_FILE_TEST_SOURCE` pointing at a local MP4.
+The video source is simulated, but frames still flow through the **real** FFmpeg
+→ inference → event pipeline. This is clearly labelled and cannot be enabled in
+production unless explicitly configured.
+
+### Environment / model requirements
+- **FFmpeg + ffprobe** must be installed for the API (probing/HLS) and media
+  worker (ingest). The provided Docker images include them.
+- **Real object detection** (person/vehicle beyond HOG, production-grade
+  fire/smoke) requires a trained model served by the inference service (ONNX via
+  `ONNX_MODEL_PATH`, GPU recommended for multiple cameras / real-time FPS). The
+  bundled OpenCV detectors are real but classical and CPU-oriented.
