@@ -181,14 +181,14 @@ run against a **real database with RLS actually enforced**, with no external
 setup.
 
 ```bash
-# Full security + functional suite (migrations + 61 tests)
+# Full security + functional suite (migrations + 99 tests)
 npm test
 
 # Live-server cross-tenant penetration gate (BUILD → BREAK → verify)
 npm run pentest
 ```
 
-### What is tested (61 automated tests)
+### What is tested (99 automated tests: 61 core + 38 safety/security)
 
 - **Database RLS** — SELECT/UPDATE/DELETE/INSERT blocked cross-tenant; fail-closed
   with no context; app role confirmed `NOBYPASSRLS`.
@@ -206,6 +206,11 @@ npm run pentest
   rejected (validated under RLS) and creates nothing.
 - **Concurrency** — interleaved A/B requests never leak context.
 - **Demo mode** — demo org data never appears in a real customer's views.
+- **Safety & Security (add-on):** fire/smoke event creation, fire+smoke
+  correlation, alert cooldown/dedup, all security event types, false-positive
+  threshold control, incident lifecycle + notes, config CRUD, tenant-scoped
+  reports, cross-tenant attacks on every new resource (both directions),
+  DB-layer RLS on the 5 new tables, and forged-job rejection.
 
 ---
 
@@ -214,6 +219,77 @@ npm run pentest
 Person detection, vehicle detection, restricted-area intrusion, line crossing,
 loitering, crowd detection, helmet detection, safety-vest detection. The rule /
 event model is extensible for future models.
+
+---
+
+## Safety & Security AI (add-on)
+
+An additive module that extends — never replaces — the existing AI event
+pipeline (camera → inference → rule engine → event → evidence → notification →
+dashboard). It is fully tenant-isolated like everything else.
+
+### Detection categories
+- **Fire & Safety:** `FIRE` (CRITICAL), `SMOKE` (HIGH), `FIRE_AND_SMOKE` (CRITICAL).
+- **Theft / Security:** `UNAUTHORIZED_ENTRY`, `AFTER_HOURS_ACTIVITY`,
+  `OBJECT_REMOVED`, `LOITERING_SECURITY`, `UNAUTHORIZED_VEHICLE`,
+  `RESTRICTED_ZONE_ACTIVITY`.
+
+The UI uses professional, non-overclaiming language ("Potential Theft",
+"Unauthorized Activity", "Fire Detected" with confidence + evidence) — it never
+asserts criminal intent. No face recognition or biometric identification.
+
+### Fire + smoke correlation
+If FIRE and SMOKE are detected on the same camera within a 60s window they are
+correlated into a single `FIRE_AND_SMOKE` critical incident — not thousands of
+duplicate alerts.
+
+### Alert cooldown / deduplication
+Each `{camera, category}` has a configurable cooldown (durable, tenant-scoped in
+`alert_cooldowns`). Continuous fire produces ONE incident + one alert, then
+evidence/updates are appended; a new alert is only sent after the cooldown
+expires. This prevents alert storms (100 emails/SMS per continuous fire).
+
+### False-positive control
+Per-rule `min_confidence` threshold and `min_duration_ms` minimum observed
+duration must both be satisfied before a critical incident is created.
+
+### Incident workflow
+Statuses extended to `OPEN → ACKNOWLEDGED → INVESTIGATING → RESOLVED`, plus
+`FALSE_POSITIVE` and `DISMISSED`. Operators add notes (`incident_notes`); every
+status change and note is written to the existing audit log.
+
+### Configuration (all tenant-scoped)
+- **AI rules** per camera/zone: type, severity, confidence, cooldown, min
+  duration, notification channels (`EMAIL`/`SMS`/`WHATSAPP`/`PUSH`/`IN_APP`/`WEBHOOK`), model.
+- **Zone schedules** (`zone_schedules`) for after-hours activity (per org/site/zone).
+- **Monitored objects** (`monitored_objects`) for object-removed detection.
+- **AI models** (`ai_models`) — the model abstraction (type/version/threshold).
+
+### AI model architecture & environment limitations
+The platform is model-agnostic: `server/src/ai/model.ts` defines an
+`InferenceAdapter` interface and a registry keyed by model type (person,
+vehicle, fire, smoke, object-tracking, generic-security). **Production**
+deployments register real, GPU-backed inference adapters (e.g. a fire/smoke
+classifier and object detector served as a microservice).
+
+**This repository ships only an explicitly-labelled DEMO adapter** (`isDemo =
+true`) used for sales demos and the automated test suite; it performs no real
+computer vision and is enabled only when `NODE_ENV !== 'production'`. It can
+never masquerade as a production model — if no production adapter is registered,
+inference fails loudly rather than fabricating detections. **Real fire/smoke/
+object detection therefore requires:** (1) a trained model + inference service
+(GPU recommended), (2) live camera/RTSP feeds reachable by the media service,
+and (3) registering the corresponding adapter at startup. The full API,
+pipeline, storage, alerting, cooldown, correlation, incident workflow, RLS and
+UI are production-ready and independent of which adapter is plugged in.
+
+### New API endpoints (all auth + membership + RBAC + RLS enforced)
+`GET/POST/PATCH/DELETE /api/ai-models`, `GET/POST/DELETE /api/zone-schedules`,
+`GET/POST/DELETE /api/monitored-objects`, `GET /api/events/security/list`,
+`GET/POST /api/events/:id/notes`, `GET /api/dashboard/security`,
+`GET /api/reports/fire-safety/data`, `GET /api/reports/security/data`. Existing
+`/api/events/ingest` and the background worker now route safety/security types
+through the detection engine (camera ownership re-validated under RLS first).
 
 ---
 
