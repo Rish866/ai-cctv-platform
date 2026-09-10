@@ -16,3 +16,4 @@ web/.env
 pgdata/
 .DS_Store
 pentest-server.log
+.pr_body.md
