@@ -160,7 +160,9 @@ class CameraPipeline {
     return 'general';
   }
 
-  private async runInference(jpeg: Buffer): Promise<Array<{ label: string; confidence: number }>> {
+  private async runInference(
+    jpeg: Buffer,
+  ): Promise<Array<{ label: string; confidence: number; bbox?: { x: number; y: number; width: number; height: number } }>> {
     const url = config.inference.serviceUrl;
     if (!url) throw new Error('INFERENCE_UNAVAILABLE: no inference service configured');
     const form = new FormData();
@@ -173,33 +175,44 @@ class CameraPipeline {
       signal: AbortSignal.timeout(config.inference.timeoutMs),
     });
     if (!res.ok) throw new Error(`INFERENCE_UNAVAILABLE: HTTP ${res.status}`);
-    const data = (await res.json()) as { detections: Array<{ class: string; confidence: number }> };
+    const data = (await res.json()) as {
+      detections: Array<{ class: string; confidence: number; bbox?: { x: number; y: number; width: number; height: number } }>;
+    };
     this.detections += data.detections.length;
     void this.reportHealth('ONLINE', undefined, { markInference: true });
-    return data.detections.map((d) => ({ label: d.class, confidence: d.confidence }));
+    return data.detections.map((d) => ({ label: d.class, confidence: d.confidence, bbox: d.bbox }));
   }
 
-  private mapLabelToEventType(label: string): string | null {
+  private mapLabelToRawClass(label: string): 'PERSON' | 'VEHICLE' | 'FIRE' | 'SMOKE' | null {
     const l = label.toUpperCase();
-    if (l === 'PERSON') return 'PERSON_DETECTION';
-    if (['CAR', 'TRUCK', 'BUS', 'MOTORCYCLE', 'BICYCLE'].includes(l)) return 'VEHICLE_DETECTION';
+    if (l === 'PERSON') return 'PERSON';
+    if (['CAR', 'TRUCK', 'BUS', 'MOTORCYCLE', 'BICYCLE'].includes(l)) return 'VEHICLE';
     if (l === 'FIRE') return 'FIRE';
     if (l === 'SMOKE') return 'SMOKE';
     return null;
   }
 
-  private async submitDetection(det: { label: string; confidence: number }, jpeg: Buffer): Promise<void> {
-    const eventType = this.mapLabelToEventType(det.label);
-    if (!eventType) return; // ignore classes we don't map to a rule
+  private async submitDetection(
+    det: { label: string; confidence: number; bbox?: { x: number; y: number; width: number; height: number } },
+    jpeg: Buffer,
+  ): Promise<void> {
+    const rawClass = this.mapLabelToRawClass(det.label);
+    if (!rawClass) return; // ignore classes we don't map
+    // Send the RAW detection + bbox so the API's rule engine derives the correct
+    // security event type (zone polygon, schedule, dwell). Evidence attached only
+    // for high-signal detections to avoid storage churn.
+    const bbox = det.bbox
+      ? { x: det.bbox.x, y: det.bbox.y, w: det.bbox.width, h: det.bbox.height }
+      : { x: 0, y: 0, w: 1, h: 1 };
     await fetch(`${config.media.apiBaseUrl}/api/internal/detections`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.media.workerToken}` },
       body: JSON.stringify({
         organizationId: this.cam.organization_id,
         cameraId: this.cam.id,
-        eventType,
+        rawClass,
+        bbox,
         confidence: det.confidence,
-        // Only attach evidence for high-signal detections to avoid storage churn.
         snapshotBase64: det.confidence >= 0.85 ? jpeg.toString('base64') : undefined,
         metadata: { label: det.label },
       }),

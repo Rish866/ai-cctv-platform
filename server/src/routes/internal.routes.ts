@@ -9,6 +9,8 @@ import { requireTenantResource } from '../services/resource.service.js';
 import { processDetection } from '../ai/engine.js';
 import { applyHealthUpdate, type CameraStatus } from '../media/health.service.js';
 import { ALL_AI_TYPES } from '../ai/types.js';
+import { evaluateDetection } from '../ai/rule-eval.js';
+import { sessionTracker } from '../ai/tracker.js';
 
 /**
  * INTERNAL media-worker API.
@@ -39,10 +41,20 @@ internalRouter.use((req, _res, next) => {
   }
 });
 
+const bboxSchema = z.object({
+  x: z.number(), y: z.number(), w: z.number(), h: z.number(),
+});
+
 const detectionJobSchema = z.object({
   organizationId: z.string().uuid(),
   cameraId: z.string().uuid(),
-  eventType: z.enum(ALL_AI_TYPES),
+  // Either a pre-mapped eventType (legacy/direct) ...
+  eventType: z.enum(ALL_AI_TYPES).optional(),
+  // ... or a raw detection class + bbox to be rule-evaluated.
+  rawClass: z.enum(['PERSON', 'VEHICLE', 'FIRE', 'SMOKE']).optional(),
+  bbox: bboxSchema.optional(),
+  trackId: z.string().max(80).optional(),
+  dwellMs: z.number().int().min(0).optional(),
   confidence: z.number().min(0).max(1),
   severity: z.enum(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   durationMs: z.number().int().min(0).max(600000).optional(),
@@ -51,38 +63,76 @@ const detectionJobSchema = z.object({
 });
 
 /**
- * Submit a detection produced by the worker/inference pipeline. Runs through the
- * EXISTING detection engine (cooldown, correlation, evidence, notify, WS, audit)
- * under the job's tenant context. Camera ownership is validated under RLS.
+ * Submit a detection produced by the worker/inference pipeline.
+ *
+ * Two modes:
+ *   * `eventType` given  -> raised directly (still tenant/camera validated).
+ *   * `rawClass` + bbox  -> run through the rule engine (zone polygon, schedule,
+ *     dwell) to derive the correct security/safety event type(s).
+ *
+ * All resulting events flow through the EXISTING processDetection engine
+ * (cooldown, FIRE+SMOKE correlation, evidence, notify, WebSocket, audit) under
+ * the job's tenant context. Camera ownership is re-validated under RLS.
  */
 internalRouter.post(
   '/detections',
   asyncHandler(async (req, res) => {
     const job = detectionJobSchema.parse(req.body);
-    const result = await withTenant(
+    const snapshot = job.snapshotBase64 ? Buffer.from(job.snapshotBase64, 'base64') : undefined;
+
+    const results = await withTenant(
       { userId: '', organizationId: job.organizationId, role: 'OPERATOR', isPlatformAdmin: false },
       async (db) => {
         // Validate camera belongs to job org (RLS => not found otherwise).
-        const cam = await requireTenantResource<{ id: string; site_id: string; inference_enabled: boolean }>(
+        const cam = await requireTenantResource<{ id: string; site_id: string }>(
           db,
           'cameras',
           job.cameraId,
-          'id, site_id, inference_enabled',
+          'id, site_id',
         );
-        return processDetection(db, {
-          organizationId: job.organizationId,
-          cameraId: cam.id,
-          siteId: cam.site_id,
-          eventType: job.eventType,
-          confidence: job.confidence,
-          severity: job.severity,
-          durationMs: job.durationMs,
-          metadata: { ...job.metadata, source: 'media-worker' },
-          snapshot: job.snapshotBase64 ? Buffer.from(job.snapshotBase64, 'base64') : undefined,
-        });
+
+        // Determine the event types to raise.
+        let eventTypes: Array<{ eventType: string; confidence: number; metadata: Record<string, unknown> }> = [];
+        if (job.rawClass && job.bbox) {
+          // Update the session tracker to compute dwell time for loitering-style
+          // rules (ephemeral trackId, per {org,camera}, no biometrics).
+          const tracked = sessionTracker.update(job.organizationId, cam.id, [
+            { label: job.rawClass, bbox: job.bbox },
+          ]);
+          const dwellMs = job.dwellMs ?? tracked[0]?.dwellMs ?? 0;
+          const evaluated = await evaluateDetection(db, cam.id, {
+            rawClass: job.rawClass,
+            confidence: job.confidence,
+            bbox: job.bbox,
+            dwellMs,
+          });
+          eventTypes = evaluated.map((e) => ({ eventType: e.eventType, confidence: e.confidence, metadata: e.metadata }));
+        } else if (job.eventType) {
+          eventTypes = [{ eventType: job.eventType, confidence: job.confidence, metadata: {} }];
+        }
+
+        const out = [];
+        for (const et of eventTypes) {
+          out.push(
+            await processDetection(db, {
+              organizationId: job.organizationId,
+              cameraId: cam.id,
+              siteId: cam.site_id,
+              eventType: et.eventType,
+              confidence: et.confidence,
+              severity: job.severity,
+              durationMs: job.durationMs,
+              metadata: { ...job.metadata, ...et.metadata, source: 'media-worker', trackId: job.trackId },
+              snapshot,
+            }),
+          );
+        }
+        return out;
       },
     );
-    res.status(result.created ? 201 : 200).json({ event: result });
+
+    const created = results.some((r) => r.created);
+    res.status(created ? 201 : 200).json({ events: results });
   }),
 );
 
