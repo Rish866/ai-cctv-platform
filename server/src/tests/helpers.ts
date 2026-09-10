@@ -1,7 +1,11 @@
+import type { Server } from 'node:http';
 import supertest from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../app.js';
 import { adminPool } from '../db/pool.js';
+
+/** A supertest target can be an Express app or a live http.Server. */
+export type TestTarget = Express | Server;
 
 export function testApp(): Express {
   return createApp();
@@ -30,7 +34,7 @@ let counter = 0;
  * Sign up a fresh tenant (org + owner) and return a supertest agent that carries
  * the session cookie, plus ids for the created user + org.
  */
-export async function signupTenant(app: Express, label: string): Promise<TenantAgent> {
+export async function signupTenant(app: TestTarget, label: string): Promise<TenantAgent> {
   counter += 1;
   const email = `${label}-${counter}-${Date.now()}@example.com`.toLowerCase();
   const agent = supertest.agent(app);
