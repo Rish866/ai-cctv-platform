@@ -19,16 +19,16 @@ async function seed(): Promise<void> {
     return;
   }
 
-  const userId = (
-    await adminPool.query<{ id: string }>(
-      `INSERT INTO users(email, password_hash, full_name)
-       VALUES ($1,$2,'Demo Operator')
-       ON CONFLICT (email) DO NOTHING
-       RETURNING id`,
-      [email, passwordHash],
-    )
-  ).rows[0]?.id
-    ?? (await adminPool.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])).rows[0]!.id;
+  const existingUser = await adminPool.query<{ id: string }>('SELECT id FROM users WHERE lower(email) = $1', [email]);
+  const userId =
+    existingUser.rows[0]?.id ??
+    (
+      await adminPool.query<{ id: string }>(
+        `INSERT INTO users(email, password_hash, full_name)
+         VALUES ($1,$2,'Demo Operator') RETURNING id`,
+        [email, passwordHash],
+      )
+    ).rows[0]!.id;
 
   const orgId = (await adminPool.query<{ id: string }>('SELECT gen_random_uuid() AS id')).rows[0]!.id;
 

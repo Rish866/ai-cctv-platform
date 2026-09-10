@@ -15,3 +15,4 @@ web/.env
 *.pid
 pgdata/
 .DS_Store
+pentest-server.log
