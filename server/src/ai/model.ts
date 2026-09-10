@@ -83,7 +83,7 @@ export const aiModelRegistry = new ModelRegistry();
  * detection derived from its input config so demo scenarios are reproducible.
  * `isDemo = true` guarantees it can never be mistaken for a production model.
  */
-class DemoAdapter implements InferenceAdapter {
+export class DemoAdapter implements InferenceAdapter {
   readonly isDemo = true;
   constructor(public readonly modelType: AiModelType) {}
 
