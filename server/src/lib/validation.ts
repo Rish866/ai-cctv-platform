@@ -37,7 +37,15 @@ export const cameraSchema = z.object({
   name: z.string().min(1).max(200),
   rtspHost: z.string().max(300).optional().nullable(),
   rtspPath: z.string().max(300).optional().nullable(),
+  rtspPort: z.number().int().min(1).max(65535).optional(),
   onvifEndpoint: z.string().max(300).optional().nullable(),
+  // Real-CCTV add-on fields (all optional + backward compatible).
+  streamProfile: z.string().max(64).optional(),
+  enabled: z.boolean().optional(),
+  inferenceEnabled: z.boolean().optional(),
+  inferenceFps: z.number().min(0).max(60).optional(),
+  // Approved dev/test source marker only (never credentials).
+  sourceKind: z.enum(['RTSP', 'VIDEO_FILE_TEST_SOURCE']).optional(),
   // Credentials are optional; when present they are encrypted at rest and never
   // returned to the client.
   username: z.string().max(200).optional(),

@@ -63,6 +63,34 @@ export const config = {
   },
 
   demoOrgSlug: optional('DEMO_ORG_SLUG', 'demo'),
+
+  // ----- Real CCTV / media / inference (add-on) -----
+  media: {
+    ffmpegPath: optional('FFMPEG_PATH', 'ffmpeg'),
+    ffprobePath: optional('FFPROBE_PATH', 'ffprobe'),
+    // Where the media worker writes HLS segments (private; served via authed API).
+    hlsRoot: optional('MEDIA_HLS_ROOT', './.hls'),
+    // RTSP connection/probe timeout (seconds).
+    probeTimeoutSeconds: parseInt(optional('RTSP_PROBE_TIMEOUT_SECONDS', '8'), 10),
+    defaultInferenceFps: parseFloat(optional('DEFAULT_INFERENCE_FPS', '2')),
+    maxConcurrentStreams: parseInt(optional('MAX_CONCURRENT_STREAMS', '25'), 10),
+    // Reconnect backoff (ms) — capped exponential.
+    reconnectBaseMs: parseInt(optional('RECONNECT_BASE_MS', '5000'), 10),
+    reconnectMaxMs: parseInt(optional('RECONNECT_MAX_MS', '60000'), 10),
+    // Circular pre-event buffer duration (seconds) for evidence clips.
+    frameBufferSeconds: parseInt(optional('FRAME_BUFFER_SECONDS', '5'), 10),
+    // Whether the VIDEO_FILE_TEST_SOURCE dev source is permitted.
+    allowVideoFileSource: optional('ALLOW_VIDEO_FILE_SOURCE', 'false') === 'true',
+    // Shared secret the media worker uses to call the API's internal ingest.
+    workerToken: optional('MEDIA_WORKER_TOKEN', 'dev-media-worker-token'),
+  },
+
+  inference: {
+    // Base URL of the Python inference service. Empty => no production adapter.
+    serviceUrl: optional('INFERENCE_SERVICE_URL', ''),
+    timeoutMs: parseInt(optional('INFERENCE_TIMEOUT_MS', '5000'), 10),
+    model: optional('INFERENCE_MODEL', 'yolo-generic'),
+  },
 } as const;
 
 export type AppConfig = typeof config;

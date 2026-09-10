@@ -15,14 +15,20 @@ import { audit } from '../services/audit.service.js';
 import { encryptSecret } from '../lib/crypto.js';
 import { createStreamSession } from '../services/stream.service.js';
 import { cacheInvalidate } from '../services/cache.service.js';
+import { testCameraConnection } from '../media/connection.service.js';
 
 export const camerasRouter = Router();
 camerasRouter.use(requireAuth, requireOrganizationMembership);
 
 // NOTE: SELECT never includes rtsp credentials — those live encrypted in
-// camera_credentials and are never returned to the browser.
+// camera_credentials and are never returned to the browser. rtsp_host/path/port
+// are non-secret connection metadata; the assembled rtsp:// URL (with password)
+// is only ever built inside the trusted media path.
 const CAMERA_PUBLIC_COLS =
-  'id, organization_id, site_id, zone_id, name, rtsp_host, rtsp_path, onvif_endpoint, status, last_seen_at, created_at, updated_at';
+  'id, organization_id, site_id, zone_id, name, rtsp_host, rtsp_path, rtsp_port, onvif_endpoint, ' +
+  'stream_profile, enabled, inference_enabled, inference_fps, resolution, codec, source_fps, ' +
+  'reconnect_count, last_connected_at, last_frame_at, last_inference_at, health, downtime_seconds, ' +
+  'source_kind, status, last_seen_at, created_at, updated_at';
 
 camerasRouter.get(
   '/',
@@ -69,9 +75,16 @@ camerasRouter.post(
       }
 
       const r = await db.query(
-        `INSERT INTO cameras(organization_id, site_id, zone_id, name, rtsp_host, rtsp_path, onvif_endpoint)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ${CAMERA_PUBLIC_COLS}`,
-        [org, input.siteId, input.zoneId ?? null, input.name, input.rtspHost ?? null, input.rtspPath ?? null, input.onvifEndpoint ?? null],
+        `INSERT INTO cameras(organization_id, site_id, zone_id, name, rtsp_host, rtsp_path, rtsp_port,
+                             onvif_endpoint, stream_profile, enabled, inference_enabled, inference_fps, source_kind)
+         VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,554), $8,
+                 COALESCE($9,'main'), COALESCE($10,true), COALESCE($11,false), COALESCE($12,2.0), COALESCE($13,'RTSP'))
+         RETURNING ${CAMERA_PUBLIC_COLS}`,
+        [
+          org, input.siteId, input.zoneId ?? null, input.name, input.rtspHost ?? null, input.rtspPath ?? null,
+          input.rtspPort ?? null, input.onvifEndpoint ?? null, input.streamProfile ?? null,
+          input.enabled ?? null, input.inferenceEnabled ?? null, input.inferenceFps ?? null, input.sourceKind ?? null,
+        ],
       );
       const cameraId = r.rows[0]!.id as string;
 
@@ -105,9 +118,17 @@ camerasRouter.patch(
            rtsp_host = COALESCE($3, rtsp_host),
            rtsp_path = COALESCE($4, rtsp_path),
            onvif_endpoint = COALESCE($5, onvif_endpoint),
+           rtsp_port = COALESCE($6, rtsp_port),
+           stream_profile = COALESCE($7, stream_profile),
+           enabled = COALESCE($8, enabled),
+           inference_enabled = COALESCE($9, inference_enabled),
+           inference_fps = COALESCE($10, inference_fps),
            updated_at = now()
          WHERE id = $1 RETURNING ${CAMERA_PUBLIC_COLS}`,
-        [req.params.id, input.name ?? null, input.rtspHost ?? null, input.rtspPath ?? null, input.onvifEndpoint ?? null],
+        [
+          req.params.id, input.name ?? null, input.rtspHost ?? null, input.rtspPath ?? null, input.onvifEndpoint ?? null,
+          input.rtspPort ?? null, input.streamProfile ?? null, input.enabled ?? null, input.inferenceEnabled ?? null, input.inferenceFps ?? null,
+        ],
       );
       if (input.username !== undefined || input.password !== undefined) {
         await db.query(
@@ -165,28 +186,81 @@ camerasRouter.post(
   }),
 );
 
-/** "Test camera" during onboarding — validates ownership + reports reachability. */
+/**
+ * REAL camera connection test. Decrypts credentials server-side, probes the
+ * RTSP stream with ffprobe, updates camera health, and returns a SAFE
+ * diagnostic (never credentials or the raw URL).
+ *
+ *   POST /api/cameras/:id/test-connection
+ *   -> { success, status, latencyMs, message, resolution?, codec?, fps? }
+ */
+camerasRouter.post(
+  '/:id/test-connection',
+  requirePermission('cameras:write'),
+  asyncHandler(async (req, res) => {
+    const org = getCurrentOrganization(req);
+    const user = getAuthenticatedUser(req);
+    const result = await tenantDb(req, async (db) => {
+      // Ownership check (404 if not our org). Then run the real probe.
+      await requireTenantResource(db, 'cameras', req.params.id!, 'id');
+      return testCameraConnection(db, { organizationId: org, cameraId: req.params.id!, actorUserId: user.id });
+    });
+    await tenantDb(req, (db) => audit(db, org, { userId: user.id, action: 'camera.test_connection', resource: 'camera', resourceId: req.params.id!, metadata: { status: result.status }, ip: req.ip }));
+    res.json(result);
+  }),
+);
+
+// Backward-compatible alias for the original onboarding "Test" button.
 camerasRouter.post(
   '/:id/test',
   requirePermission('cameras:write'),
   asyncHandler(async (req, res) => {
+    const org = getCurrentOrganization(req);
+    const user = getAuthenticatedUser(req);
     const result = await tenantDb(req, async (db) => {
-      const cam = await requireTenantResource<{ id: string; rtsp_host: string | null }>(
+      await requireTenantResource(db, 'cameras', req.params.id!, 'id');
+      return testCameraConnection(db, { organizationId: org, cameraId: req.params.id!, actorUserId: user.id });
+    });
+    res.json({ reachable: result.success, status: result.success ? 'ONLINE' : result.status, message: result.message });
+  }),
+);
+
+/** Camera health snapshot + recent health events (tenant scoped). */
+camerasRouter.get(
+  '/:id/health',
+  requirePermission('cameras:read'),
+  asyncHandler(async (req, res) => {
+    const data = await tenantDb(req, async (db) => {
+      const cam = await requireTenantResource<Record<string, unknown>>(
         db,
         'cameras',
         req.params.id!,
-        'id, rtsp_host',
+        'id, status, health, resolution, codec, source_fps, reconnect_count, last_connected_at, last_frame_at, last_inference_at, downtime_seconds, inference_enabled, inference_fps, enabled',
       );
-      const hasCreds = (await db.query('SELECT 1 FROM camera_credentials WHERE camera_id = $1', [cam.id])).rowCount ?? 0;
-      // Simulated reachability check (no real network egress to customer cameras
-      // from this environment). Reports whether config is complete.
-      const configured = Boolean(cam.rtsp_host) && hasCreds > 0;
-      await db.query(`UPDATE cameras SET status = $2, last_seen_at = now() WHERE id = $1`, [
-        cam.id,
-        configured ? 'ONLINE' : 'DEGRADED',
-      ]);
-      return { reachable: configured, status: configured ? 'ONLINE' : 'DEGRADED' };
+      const events = (await db.query(
+        `SELECT status, health, detail, created_at FROM camera_health_events WHERE camera_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        [req.params.id],
+      )).rows;
+      return { health: cam, recentEvents: events };
     });
-    res.json(result);
+    res.json(data);
+  }),
+);
+
+/** Camera inference stats (tenant scoped). */
+camerasRouter.get(
+  '/:id/stats',
+  requirePermission('cameras:read'),
+  asyncHandler(async (req, res) => {
+    const data = await tenantDb(req, async (db) => {
+      await requireTenantResource(db, 'cameras', req.params.id!, 'id');
+      const stats = (await db.query('SELECT * FROM inference_stats WHERE camera_id = $1', [req.params.id])).rows[0] ?? null;
+      const eventsToday = (await db.query(
+        `SELECT count(*)::int AS c FROM events WHERE camera_id = $1 AND occurred_at >= date_trunc('day', now())`,
+        [req.params.id],
+      )).rows[0];
+      return { stats, eventsToday: eventsToday?.c ?? 0 };
+    });
+    res.json(data);
   }),
 );
