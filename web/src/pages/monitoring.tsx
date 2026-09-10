@@ -2,8 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { Badge, EmptyState, ErrorBox, Loading, useApi } from '../components';
 import { eventLabel } from '../safety';
+import { LivePlayer } from '../LivePlayer';
 
-interface Camera { id: string; name: string; status: string; }
+interface Camera {
+  id: string;
+  name: string;
+  status: string;
+  health?: string;
+  inference_enabled?: boolean;
+  inference_fps?: number;
+  last_inference_at?: string | null;
+}
+
+interface AiStatus {
+  ai: { mode: 'AI_ACTIVE' | 'DEMO_AI' | 'INFERENCE_OFFLINE'; inferenceConfigured: boolean; reachable: boolean; model: string };
+  cameras: { total: number; online: number; offline: number; inference: number };
+}
+
+function AiStatusBadge({ mode }: { mode: AiStatus['ai']['mode'] }) {
+  if (mode === 'AI_ACTIVE') return <span className="badge ONLINE">🟢 AI Active</span>;
+  if (mode === 'DEMO_AI') return <span className="badge INVESTIGATING">🟡 Demo AI</span>;
+  return <span className="badge OFFLINE">🔴 Inference Offline</span>;
+}
 
 // Live per-camera indicator derived from the tenant WebSocket feed.
 type CamState = 'NORMAL' | 'ACTIVITY' | 'CRITICAL';
@@ -17,8 +37,10 @@ function stateDot(s: CamState): { color: string; label: string } {
 
 export function LiveMonitoring() {
   const { data, loading, error } = useApi(() => api.get<{ cameras: Camera[] }>('/cameras'));
+  const aiStatus = useApi(() => api.get<AiStatus>('/system/ai-status'));
   const [live, setLive] = useState<string[]>([]);
   const [camStates, setCamStates] = useState<Record<string, CamState>>({});
+  const [playing, setPlaying] = useState<string | null>(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -51,15 +73,22 @@ export function LiveMonitoring() {
     };
   }, []);
 
-  const openStream = async (id: string) => {
-    const r = await api.post<{ stream: { playbackUrl: string; expiresAt: number } }>(`/cameras/${id}/stream`);
-    alert(`Authenticated stream session created.\nPlayback URL (signed, expires soon):\n${r.stream.playbackUrl}`);
-  };
-
   return (
     <div>
-      <h1 className="page-title">Live Monitoring</h1>
-      <p className="page-sub">Authenticated, tenant-scoped streams. Raw RTSP is never exposed to the browser.</p>
+      <div className="toolbar">
+        <div>
+          <h1 className="page-title">Live Monitoring</h1>
+          <p className="page-sub">Authenticated, tenant-scoped HLS streams. Raw RTSP is never exposed to the browser.</p>
+        </div>
+        <div className="row-actions" style={{ alignItems: 'center' }}>
+          {aiStatus.data && <AiStatusBadge mode={aiStatus.data.ai.mode} />}
+          {aiStatus.data && (
+            <span className="muted" style={{ fontSize: 13 }}>
+              {aiStatus.data.cameras.online}/{aiStatus.data.cameras.total} online · {aiStatus.data.cameras.inference} AI-enabled
+            </span>
+          )}
+        </div>
+      </div>
       <ErrorBox error={error} />
       <div className="grid cols-2" style={{ marginTop: 16 }}>
         <div>
@@ -74,7 +103,7 @@ export function LiveMonitoring() {
                   <div
                     key={c.id}
                     className="live-tile"
-                    onClick={() => openStream(c.id)}
+                    onClick={() => setPlaying(c.id)}
                     style={{ cursor: 'pointer', boxShadow: st === 'CRITICAL' ? '0 0 0 2px var(--crit)' : undefined }}
                   >
                     <div className="scan" />
@@ -84,7 +113,9 @@ export function LiveMonitoring() {
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700 }}>{c.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>Click to open secure stream</div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {c.inference_enabled ? `AI ${Number(c.inference_fps ?? 0)}fps` : 'AI off'} · click for secure live stream
+                      </div>
                     </div>
                   </div>
                 );
@@ -106,6 +137,7 @@ export function LiveMonitoring() {
           )}
         </div>
       </div>
+      {playing && <LivePlayer cameraId={playing} onClose={() => setPlaying(null)} />}
     </div>
   );
 }

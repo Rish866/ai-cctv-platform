@@ -82,13 +82,27 @@ export function Sites() {
   );
 }
 
-interface Camera { id: string; name: string; site_id: string; status: string; rtsp_host: string | null; }
+interface Camera {
+  id: string;
+  name: string;
+  site_id: string;
+  status: string;
+  health?: string;
+  rtsp_host: string | null;
+  inference_enabled?: boolean;
+  inference_fps?: number;
+  resolution?: string | null;
+}
 
 export function Cameras() {
   const cameras = useApi(() => api.get<{ cameras: Camera[] }>('/cameras'));
   const sites = useApi(() => api.get<{ sites: Site[] }>('/sites'));
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ siteId: '', name: '', rtspHost: '', rtspPath: '', username: '', password: '' });
+  const emptyForm = {
+    siteId: '', name: '', rtspHost: '', rtspPath: '', rtspPort: 554, streamProfile: 'main',
+    username: '', password: '', inferenceEnabled: false, inferenceFps: 2,
+  };
+  const [form, setForm] = useState({ ...emptyForm });
   const [saveErr, setSaveErr] = useState<unknown>(null);
   const [testMsg, setTestMsg] = useState<Record<string, string>>({});
   const [rulesFor, setRulesFor] = useState<Camera | null>(null);
@@ -98,17 +112,21 @@ export function Cameras() {
     try {
       await api.post('/cameras', { ...form, siteId: form.siteId || sites.data?.sites[0]?.id });
       setShowAdd(false);
-      setForm({ siteId: '', name: '', rtspHost: '', rtspPath: '', username: '', password: '' });
+      setForm({ ...emptyForm });
       cameras.reload();
     } catch (e) {
       setSaveErr(e);
     }
   };
 
+  // Real connection test via ffprobe. Returns a safe diagnostic (never creds).
   const test = async (id: string) => {
+    setTestMsg((m) => ({ ...m, [id]: 'Testing…' }));
     try {
-      const r = await api.post<{ reachable: boolean; status: string }>(`/cameras/${id}/test`);
-      setTestMsg((m) => ({ ...m, [id]: r.reachable ? 'Reachable ✓' : 'Config incomplete' }));
+      const r = await api.post<{ success: boolean; status: string; latencyMs: number; message: string }>(
+        `/cameras/${id}/test-connection`,
+      );
+      setTestMsg((m) => ({ ...m, [id]: `${r.success ? '✓' : '✗'} ${r.status} — ${r.message}${r.success ? ` (${r.latencyMs}ms)` : ''}` }));
       cameras.reload();
     } catch (e) {
       setTestMsg((m) => ({ ...m, [id]: e instanceof ApiError ? e.message : 'Test failed' }));
@@ -138,16 +156,17 @@ export function Cameras() {
       ) : cameras.data && cameras.data.cameras.length > 0 ? (
         <div className="card">
           <table>
-            <thead><tr><th>Name</th><th>Host</th><th>Status</th><th>Test</th><th>Detection rules</th></tr></thead>
+            <thead><tr><th>Name</th><th>Host</th><th>Status</th><th>AI</th><th>Test connection</th><th>Detection rules</th></tr></thead>
             <tbody>
               {cameras.data.cameras.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
+                  <td>{c.name}{c.resolution ? <span className="muted" style={{ fontSize: 12 }}> · {c.resolution}</span> : null}</td>
                   <td className="muted">{c.rtsp_host ?? '—'}</td>
                   <td><Badge kind={c.status}>{c.status}</Badge></td>
+                  <td>{c.inference_enabled ? <span className="pill">AI {Number(c.inference_fps ?? 0)}fps</span> : <span className="muted">off</span>}</td>
                   <td>
                     <button className="btn secondary small" onClick={() => test(c.id)}>Test</button>
-                    {testMsg[c.id] && <span className="muted" style={{ marginLeft: 8 }}>{testMsg[c.id]}</span>}
+                    {testMsg[c.id] && <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>{testMsg[c.id]}</span>}
                   </td>
                   <td className="row-actions">
                     <button className="btn secondary small" onClick={() => setRulesFor(c)}>Rules</button>
@@ -171,12 +190,30 @@ export function Cameras() {
           <label>Camera name</label>
           <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <div className="form-row">
-            <div><label>RTSP host</label><input className="input" value={form.rtspHost} onChange={(e) => setForm({ ...form, rtspHost: e.target.value })} placeholder="192.168.1.10" /></div>
-            <div><label>RTSP path</label><input className="input" value={form.rtspPath} onChange={(e) => setForm({ ...form, rtspPath: e.target.value })} placeholder="/stream1" /></div>
+            <div style={{ flex: 3 }}><label>RTSP host / IP</label><input className="input" value={form.rtspHost} onChange={(e) => setForm({ ...form, rtspHost: e.target.value })} placeholder="192.168.1.10" /></div>
+            <div><label>Port</label><input className="input" type="number" value={form.rtspPort} onChange={(e) => setForm({ ...form, rtspPort: Number(e.target.value) })} /></div>
           </div>
+          <div className="form-row">
+            <div style={{ flex: 2 }}><label>RTSP path</label><input className="input" value={form.rtspPath} onChange={(e) => setForm({ ...form, rtspPath: e.target.value })} placeholder="/Streaming/Channels/101" /></div>
+            <div><label>Stream profile</label>
+              <select className="input" value={form.streamProfile} onChange={(e) => setForm({ ...form, streamProfile: e.target.value })}>
+                {['main', 'sub'].map((p) => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            Credentials are encrypted at rest and never shown again. The full RTSP URL (with password) never leaves the server.
+          </p>
           <div className="form-row">
             <div><label>Username</label><input className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div>
             <div><label>Password</label><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+          </div>
+          <div className="form-row" style={{ alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+              <input type="checkbox" checked={form.inferenceEnabled} onChange={(e) => setForm({ ...form, inferenceEnabled: e.target.checked })} />
+              Enable AI inference
+            </label>
+            <div><label>Inference FPS</label><input className="input" type="number" min={0} max={30} step={0.5} value={form.inferenceFps} onChange={(e) => setForm({ ...form, inferenceFps: Number(e.target.value) })} /></div>
           </div>
           <ErrorBox error={saveErr} />
           <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>

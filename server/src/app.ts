@@ -22,6 +22,7 @@ import { storageRouter, streamsRouter } from './routes/storage.routes.js';
 import { platformRouter } from './routes/platform.routes.js';
 import { aiModelsRouter, monitoredObjectsRouter, schedulesRouter } from './routes/safety.routes.js';
 import { internalRouter } from './routes/internal.routes.js';
+import { systemRouter } from './routes/system.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -101,6 +102,7 @@ export function createApp(): Express {
   app.use('/api/storage', storageRouter);
   app.use('/api/streams', streamsRouter);
   app.use('/api/platform', platformRouter);
+  app.use('/api/system', systemRouter);
   // Internal media-worker API (worker-token auth; still tenant-validated by RLS).
   app.use('/api/internal', internalRouter);
 
