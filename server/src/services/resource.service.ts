@@ -32,6 +32,9 @@ const TENANT_TABLES = new Set([
   'monitored_objects',
   'incident_notes',
   'alert_cooldowns',
+  // Real CCTV/RTSP add-on tenant tables.
+  'camera_health_events',
+  'inference_stats',
 ]);
 
 export async function requireTenantResource<R extends Record<string, unknown>>(
