@@ -47,8 +47,73 @@ export function Reports() {
           {selected ? <ReportData id={selected} /> : <EmptyState>Select a report to view analytics.</EmptyState>}
         </div>
       </div>
+
+      {/* Fire & Safety and Security reports (ADD-ON) — tenant scoped. */}
+      <div className="grid cols-2" style={{ marginTop: 16 }}>
+        <FireSafetyReport />
+        <SecurityReport />
+      </div>
     </div>
   );
+}
+
+function FireSafetyReport() {
+  const { data, loading } = useApi(() => api.get<FirePayload>('/reports/fire-safety/data'));
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Fire &amp; Safety Report</h3>
+      {loading || !data ? (
+        <Loading />
+      ) : (
+        <>
+          <div className="grid cols-2">
+            <StatCard label="Fire events" value={data.totals.fire_events} tone="crit" />
+            <StatCard label="Smoke events" value={data.totals.smoke_events} tone="warn" />
+            <StatCard label="Fire + Smoke" value={data.totals.fire_and_smoke_events} tone="crit" />
+            <StatCard label="Resolved" value={data.totals.resolved} tone="accent" />
+          </div>
+          {data.bySite.length > 0 && (
+            <>
+              <h4>By site</h4>
+              <table><tbody>{data.bySite.map((r) => <tr key={r.site}><td>{r.site}</td><td>{r.count}</td></tr>)}</tbody></table>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+interface FirePayload {
+  totals: { fire_events: number; smoke_events: number; fire_and_smoke_events: number; critical_incidents: number; resolved: number };
+  byCamera: { camera: string; count: number }[];
+  bySite: { site: string; count: number }[];
+}
+
+function SecurityReport() {
+  const { data, loading } = useApi(() => api.get<SecReportPayload>('/reports/security/data'));
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Security Report</h3>
+      {loading || !data ? (
+        <Loading />
+      ) : (
+        <>
+          <div className="grid cols-2">
+            <StatCard label="Unauthorized entries" value={data.totals.unauthorized_entries} tone="warn" />
+            <StatCard label="After-hours" value={data.totals.after_hours} tone="warn" />
+            <StatCard label="Object removed" value={data.totals.object_removed} tone="warn" />
+            <StatCard label="Unauthorized vehicle" value={data.totals.unauthorized_vehicle} />
+            <StatCard label="Restricted zone" value={data.totals.restricted_zone} tone="warn" />
+            <StatCard label="Resolved" value={data.totals.resolved} tone="accent" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+interface SecReportPayload {
+  totals: { unauthorized_entries: number; after_hours: number; object_removed: number; unauthorized_vehicle: number; restricted_zone: number; resolved: number };
+  bySite: { site: string; count: number }[];
 }
 
 function ReportData({ id }: { id: string }) {

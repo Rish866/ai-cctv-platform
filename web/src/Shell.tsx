@@ -6,6 +6,7 @@ const NAV = [
   { to: '/app', label: 'Dashboard', end: true },
   { to: '/app/live', label: 'Live Monitoring' },
   { to: '/app/events', label: 'AI Events' },
+  { to: '/app/security', label: 'Security Center' },
   { to: '/app/alerts', label: 'Alerts' },
   { section: 'Infrastructure' },
   { to: '/app/sites', label: 'Sites & Zones' },

@@ -11,6 +11,7 @@ import { Cameras, Sites } from './pages/sites';
 import { Events } from './pages/events';
 import { Alerts, LiveMonitoring } from './pages/monitoring';
 import { Audit, Billing, Onboarding, Platform, Reports, Settings, Users } from './pages/org';
+import { SecurityCenter } from './pages/security';
 
 /** Route guard: requires an authenticated user (fail closed -> redirect to login). */
 function Protected({ children }: { children: ReactNode }) {
@@ -42,6 +43,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="live" element={<LiveMonitoring />} />
             <Route path="events" element={<Events />} />
+            <Route path="security" element={<SecurityCenter />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="sites" element={<Sites />} />
             <Route path="cameras" element={<Cameras />} />

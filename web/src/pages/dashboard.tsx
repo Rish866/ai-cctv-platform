@@ -11,8 +11,20 @@ interface Stats {
   site_count: number;
 }
 
+interface SecStats {
+  fire_today: number;
+  smoke_today: number;
+  security_today: number;
+  unauthorized_entry: number;
+  after_hours: number;
+  potential_theft: number;
+  critical_incidents: number;
+  open_incidents: number;
+}
+
 export function Dashboard() {
   const { data, error, loading } = useApi(() => api.get<{ stats: Stats }>('/dashboard'));
+  const security = useApi(() => api.get<{ stats: SecStats }>('/dashboard/security'));
   const events = useApi(() => api.get<{ events: EventRow[] }>('/events'));
 
   if (loading) return <Loading />;
@@ -32,6 +44,23 @@ export function Dashboard() {
           <StatCard label="Unresolved" value={data.stats.unresolved_events} tone="warn" />
           <StatCard label="Resolved rate" value={`${resolvedRate(data.stats)}%`} tone="accent" />
         </div>
+      )}
+
+      {/* Safety & Security widgets (ADD-ON). Tenant-scoped counts. */}
+      {security.data && (
+        <>
+          <h3 style={{ marginTop: 24, marginBottom: 4 }}>Safety &amp; Security</h3>
+          <div className="grid cols-4">
+            <StatCard label="Fire incidents today" value={security.data.stats.fire_today} tone="crit" />
+            <StatCard label="Smoke incidents today" value={security.data.stats.smoke_today} tone="warn" />
+            <StatCard label="Security incidents today" value={security.data.stats.security_today} />
+            <StatCard label="Unauthorized entries" value={security.data.stats.unauthorized_entry} tone="warn" />
+            <StatCard label="After-hours events" value={security.data.stats.after_hours} tone="warn" />
+            <StatCard label="Potential theft events" value={security.data.stats.potential_theft} tone="warn" />
+            <StatCard label="Critical incidents" value={security.data.stats.critical_incidents} tone="crit" />
+            <StatCard label="Open incidents" value={security.data.stats.open_incidents} tone="warn" />
+          </div>
+        </>
       )}
       <div className="card" style={{ marginTop: 20 }}>
         <h3 style={{ marginTop: 0 }}>Recent events</h3>

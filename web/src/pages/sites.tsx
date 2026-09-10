@@ -91,6 +91,7 @@ export function Cameras() {
   const [form, setForm] = useState({ siteId: '', name: '', rtspHost: '', rtspPath: '', username: '', password: '' });
   const [saveErr, setSaveErr] = useState<unknown>(null);
   const [testMsg, setTestMsg] = useState<Record<string, string>>({});
+  const [rulesFor, setRulesFor] = useState<Camera | null>(null);
 
   const create = async () => {
     setSaveErr(null);
@@ -137,7 +138,7 @@ export function Cameras() {
       ) : cameras.data && cameras.data.cameras.length > 0 ? (
         <div className="card">
           <table>
-            <thead><tr><th>Name</th><th>Host</th><th>Status</th><th>Test</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Host</th><th>Status</th><th>Test</th><th>Detection rules</th></tr></thead>
             <tbody>
               {cameras.data.cameras.map((c) => (
                 <tr key={c.id}>
@@ -148,7 +149,10 @@ export function Cameras() {
                     <button className="btn secondary small" onClick={() => test(c.id)}>Test</button>
                     {testMsg[c.id] && <span className="muted" style={{ marginLeft: 8 }}>{testMsg[c.id]}</span>}
                   </td>
-                  <td><button className="btn secondary small" onClick={() => remove(c.id)}>Delete</button></td>
+                  <td className="row-actions">
+                    <button className="btn secondary small" onClick={() => setRulesFor(c)}>Rules</button>
+                    <button className="btn secondary small" onClick={() => remove(c.id)}>Delete</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -181,6 +185,151 @@ export function Cameras() {
           </div>
         </Modal>
       )}
+
+      {rulesFor && <CameraRulesModal camera={rulesFor} onClose={() => setRulesFor(null)} />}
     </div>
+  );
+}
+
+// ---------------- Detection rule configuration (ADD-ON) ----------------
+const ALL_RULE_TYPES: { type: string; label: string }[] = [
+  { type: 'PERSON_DETECTION', label: 'Person Detection' },
+  { type: 'VEHICLE_DETECTION', label: 'Vehicle Detection' },
+  { type: 'RESTRICTED_AREA_INTRUSION', label: 'Restricted Area Intrusion' },
+  { type: 'LINE_CROSSING', label: 'Line Crossing' },
+  { type: 'LOITERING', label: 'Loitering' },
+  { type: 'CROWD_DETECTION', label: 'Crowd Detection' },
+  { type: 'HELMET_DETECTION', label: 'Helmet Detection' },
+  { type: 'SAFETY_VEST_DETECTION', label: 'Safety Vest Detection' },
+  { type: 'FIRE', label: 'Fire Detection' },
+  { type: 'SMOKE', label: 'Smoke Detection' },
+  { type: 'FIRE_AND_SMOKE', label: 'Fire + Smoke' },
+  { type: 'UNAUTHORIZED_ENTRY', label: 'Unauthorized Entry' },
+  { type: 'AFTER_HOURS_ACTIVITY', label: 'After-Hours Activity' },
+  { type: 'OBJECT_REMOVED', label: 'Object Removed' },
+  { type: 'UNAUTHORIZED_VEHICLE', label: 'Unauthorized Vehicle' },
+  { type: 'RESTRICTED_ZONE_ACTIVITY', label: 'Restricted Zone Activity' },
+];
+const CHANNELS = ['EMAIL', 'SMS', 'WHATSAPP', 'PUSH', 'IN_APP', 'WEBHOOK'];
+
+interface Rule {
+  id: string;
+  rule_type: string;
+  enabled: boolean;
+  severity: string;
+  min_confidence: number;
+  cooldown_seconds: number;
+  notify_channels: string[];
+}
+
+function CameraRulesModal({ camera, onClose }: { camera: { id: string; name: string }; onClose: () => void }) {
+  const rules = useApi(() => api.get<{ rules: Rule[] }>('/ai-rules'));
+  const [form, setForm] = useState({
+    ruleType: 'FIRE',
+    severity: 'CRITICAL',
+    minConfidence: 0.7,
+    cooldownSeconds: 30,
+    minDurationMs: 2000,
+    channels: ['IN_APP'] as string[],
+  });
+  const [err, setErr] = useState<unknown>(null);
+
+  const cameraRules = (rules.data?.rules ?? []).filter(() => true);
+
+  const toggleChannel = (c: string) =>
+    setForm((f) => ({ ...f, channels: f.channels.includes(c) ? f.channels.filter((x) => x !== c) : [...f.channels, c] }));
+
+  const save = async () => {
+    setErr(null);
+    try {
+      await api.post('/ai-rules', {
+        cameraId: camera.id,
+        ruleType: form.ruleType,
+        severity: form.severity,
+        minConfidence: Number(form.minConfidence),
+        cooldownSeconds: Number(form.cooldownSeconds),
+        minDurationMs: Number(form.minDurationMs),
+        notifyChannels: form.channels,
+        enabled: true,
+      });
+      rules.reload();
+    } catch (e) {
+      setErr(e);
+    }
+  };
+
+  const removeRule = async (id: string) => {
+    await api.del(`/ai-rules/${id}`).catch(() => undefined);
+    rules.reload();
+  };
+
+  return (
+    <Modal title={`Detection rules — ${camera.name}`} onClose={onClose}>
+      <p className="muted" style={{ fontSize: 13 }}>
+        Configure fire, smoke and security detection for this camera. All rules belong to your organization only.
+      </p>
+      {rules.loading ? (
+        <Loading />
+      ) : cameraRules.length > 0 ? (
+        <table>
+          <thead><tr><th>Type</th><th>Severity</th><th>Conf.</th><th>Cooldown</th><th>Channels</th><th></th></tr></thead>
+          <tbody>
+            {cameraRules.map((r) => (
+              <tr key={r.id}>
+                <td>{ALL_RULE_TYPES.find((t) => t.type === r.rule_type)?.label ?? r.rule_type}</td>
+                <td><span className={`badge ${r.severity}`}>{r.severity}</span></td>
+                <td>{Math.round((r.min_confidence ?? 0) * 100)}%</td>
+                <td>{r.cooldown_seconds}s</td>
+                <td className="muted">{(r.notify_channels ?? []).join(', ') || '—'}</td>
+                <td><button className="btn secondary small" onClick={() => removeRule(r.id)}>Delete</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="muted">No rules yet for your organization.</p>
+      )}
+
+      <h4>Add rule</h4>
+      <label>Detection type</label>
+      <select className="input" value={form.ruleType} onChange={(e) => setForm({ ...form, ruleType: e.target.value })}>
+        {ALL_RULE_TYPES.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
+      </select>
+      <div className="form-row">
+        <div>
+          <label>Severity</label>
+          <select className="input" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+            {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label>Confidence ≥</label>
+          <input className="input" type="number" min={0} max={1} step={0.05} value={form.minConfidence} onChange={(e) => setForm({ ...form, minConfidence: Number(e.target.value) })} />
+        </div>
+      </div>
+      <div className="form-row">
+        <div>
+          <label>Cooldown (sec)</label>
+          <input className="input" type="number" min={0} value={form.cooldownSeconds} onChange={(e) => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
+        </div>
+        <div>
+          <label>Min duration (ms)</label>
+          <input className="input" type="number" min={0} value={form.minDurationMs} onChange={(e) => setForm({ ...form, minDurationMs: Number(e.target.value) })} />
+        </div>
+      </div>
+      <label>Notification channels</label>
+      <div className="row-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
+        {CHANNELS.map((c) => (
+          <button key={c} type="button" className={`btn ${form.channels.includes(c) ? '' : 'secondary'} small`} onClick={() => toggleChannel(c)}>
+            {form.channels.includes(c) ? '✓ ' : ''}{c}
+          </button>
+        ))}
+      </div>
+      <ErrorBox error={err} />
+      <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+        <button className="btn secondary" onClick={onClose}>Close</button>
+        <button className="btn" onClick={save}>Save rule</button>
+      </div>
+    </Modal>
   );
 }

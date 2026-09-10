@@ -60,6 +60,9 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px
 .badge.CRITICAL { background: #4a0f1e; color: var(--crit); }
 .badge.ONLINE, .badge.ACTIVE, .badge.RESOLVED { background: #102e26; color: var(--accent); }
 .badge.OFFLINE, .badge.OPEN { background: #3a1720; color: #ff9db0; }
+.badge.ACKNOWLEDGED { background: #1e2a52; color: #9fb4ff; }
+.badge.INVESTIGATING { background: #3a2f12; color: var(--warn); }
+.badge.FALSE_POSITIVE, .badge.DISMISSED { background: #23283a; color: var(--muted); }
 .badge.role { background: #1e2a52; color: #9fb4ff; text-transform: capitalize; }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }

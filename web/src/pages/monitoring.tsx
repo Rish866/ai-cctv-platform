@@ -1,12 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { Badge, EmptyState, ErrorBox, Loading, useApi } from '../components';
+import { eventLabel } from '../safety';
 
 interface Camera { id: string; name: string; status: string; }
+
+// Live per-camera indicator derived from the tenant WebSocket feed.
+type CamState = 'NORMAL' | 'ACTIVITY' | 'CRITICAL';
+const CRITICAL_TYPES = new Set(['FIRE', 'FIRE_AND_SMOKE']);
+
+function stateDot(s: CamState): { color: string; label: string } {
+  if (s === 'CRITICAL') return { color: 'var(--crit)', label: '🔴 Critical Event' };
+  if (s === 'ACTIVITY') return { color: 'var(--warn)', label: '🟡 Activity' };
+  return { color: 'var(--accent)', label: '🟢 Normal' };
+}
 
 export function LiveMonitoring() {
   const { data, loading, error } = useApi(() => api.get<{ cameras: Camera[] }>('/cameras'));
   const [live, setLive] = useState<string[]>([]);
+  const [camStates, setCamStates] = useState<Record<string, CamState>>({});
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     // Subscribe to the tenant WebSocket channel; the server only sends THIS org's events.
@@ -15,12 +28,27 @@ export function LiveMonitoring() {
     ws.onmessage = (m) => {
       try {
         const msg = JSON.parse(m.data);
-        if (msg.type === 'event.created') {
-          setLive((l) => [`${new Date().toLocaleTimeString()} — ${msg.payload.severity} ${msg.payload.eventType}`, ...l].slice(0, 20));
+        const p = msg.payload ?? {};
+        // Any of our new safety/security event types OR the base event.created.
+        if (p.eventType) {
+          const label = eventLabel(p.eventType);
+          setLive((l) => [`${new Date().toLocaleTimeString()} — ${p.severity ?? ''} ${label}`.trim(), ...l].slice(0, 25));
+          if (p.cameraId) {
+            const next: CamState = CRITICAL_TYPES.has(p.eventType) || p.severity === 'CRITICAL' ? 'CRITICAL' : 'ACTIVITY';
+            setCamStates((s) => ({ ...s, [p.cameraId]: next }));
+            // Auto-decay the indicator back to normal after a short window.
+            clearTimeout(timers.current[p.cameraId]);
+            timers.current[p.cameraId] = setTimeout(() => {
+              setCamStates((s) => ({ ...s, [p.cameraId]: 'NORMAL' }));
+            }, next === 'CRITICAL' ? 15000 : 6000);
+          }
         }
       } catch { /* ignore */ }
     };
-    return () => ws.close();
+    return () => {
+      ws.close();
+      Object.values(timers.current).forEach(clearTimeout);
+    };
   }, []);
 
   const openStream = async (id: string) => {
@@ -39,16 +67,28 @@ export function LiveMonitoring() {
             <Loading />
           ) : data && data.cameras.length > 0 ? (
             <div className="grid cols-2">
-              {data.cameras.map((c) => (
-                <div key={c.id} className="live-tile" onClick={() => openStream(c.id)} style={{ cursor: 'pointer' }}>
-                  <div className="scan" />
-                  <div className="status"><Badge kind={c.status}>{c.status}</Badge></div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700 }}>{c.name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>Click to open secure stream</div>
+              {data.cameras.map((c) => {
+                const st = camStates[c.id] ?? 'NORMAL';
+                const dot = stateDot(st);
+                return (
+                  <div
+                    key={c.id}
+                    className="live-tile"
+                    onClick={() => openStream(c.id)}
+                    style={{ cursor: 'pointer', boxShadow: st === 'CRITICAL' ? '0 0 0 2px var(--crit)' : undefined }}
+                  >
+                    <div className="scan" />
+                    <div className="status"><Badge kind={c.status}>{c.status}</Badge></div>
+                    <div style={{ position: 'absolute', top: 8, right: 8, fontSize: 12, color: dot.color, fontWeight: 700 }}>
+                      {dot.label}
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700 }}>{c.name}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>Click to open secure stream</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="card"><EmptyState>No cameras to monitor.</EmptyState></div>
@@ -56,7 +96,7 @@ export function LiveMonitoring() {
         </div>
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Live event feed</h3>
-          <p className="muted" style={{ fontSize: 13 }}>Real-time via tenant WebSocket channel.</p>
+          <p className="muted" style={{ fontSize: 13 }}>Real-time via tenant WebSocket channel — fire, smoke &amp; security included.</p>
           {live.length === 0 ? (
             <EmptyState>Waiting for events… try "Simulate detection" on the AI Events page.</EmptyState>
           ) : (
@@ -111,7 +151,7 @@ export function Alerts() {
             <div><label>Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div><label>Channel</label>
               <select className="input" value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })}>
-                {['EMAIL', 'SMS', 'WEBHOOK', 'IN_APP'].map((c) => <option key={c}>{c}</option>)}
+                {['EMAIL', 'SMS', 'WEBHOOK', 'IN_APP', 'WHATSAPP', 'PUSH'].map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
