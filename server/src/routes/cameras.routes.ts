@@ -12,10 +12,11 @@ import {
 } from '../middleware/context.js';
 import { requireTenantResource } from '../services/resource.service.js';
 import { audit } from '../services/audit.service.js';
-import { encryptSecret } from '../lib/crypto.js';
-import { createStreamSession } from '../services/stream.service.js';
+import { encryptSecret, decryptSecret } from '../lib/crypto.js';
+import { createStreamSession, verifyStreamToken } from '../services/stream.service.js';
 import { cacheInvalidate } from '../services/cache.service.js';
 import { testCameraConnection } from '../media/connection.service.js';
+import { hlsManager } from '../media/hls.service.js';
 
 export const camerasRouter = Router();
 camerasRouter.use(requireAuth, requireOrganizationMembership);
@@ -244,6 +245,106 @@ camerasRouter.get(
       return { health: cam, recentEvents: events };
     });
     res.json(data);
+  }),
+);
+
+/**
+ * Start (or reuse) a browser-compatible HLS live session for a camera and return
+ * a SIGNED manifest URL. Verifies user -> membership -> camera ownership (RLS)
+ * before starting the RTSP->HLS transcode. The raw RTSP URL / credentials are
+ * decrypted server-side inside the HLS service and NEVER returned to the client.
+ *
+ *   GET /api/cameras/:id/live
+ *   -> { live: { manifestUrl, expiresAt, protocol: 'hls' } }
+ */
+camerasRouter.get(
+  '/:id/live',
+  requirePermission('cameras:stream'),
+  asyncHandler(async (req, res) => {
+    const org = getCurrentOrganization(req);
+    const info = await tenantDb(req, async (db) => {
+      const cam = await requireTenantResource<{ id: string; site_id: string; rtsp_host: string | null; rtsp_path: string | null; rtsp_port: number; source_kind: string }>(
+        db,
+        'cameras',
+        req.params.id!,
+        'id, site_id, rtsp_host, rtsp_path, rtsp_port, source_kind',
+      );
+      if (!cam.rtsp_host && cam.source_kind !== 'VIDEO_FILE_TEST_SOURCE') {
+        return { error: 'Camera has no stream source configured' as const, siteId: cam.site_id };
+      }
+      // Decrypt credentials server-side ONLY (used by the HLS transcoder).
+      const cr = await db.query<{ username_enc: string; password_enc: string }>(
+        'SELECT username_enc, password_enc FROM camera_credentials WHERE camera_id = $1',
+        [cam.id],
+      );
+      let username: string | undefined;
+      let password: string | undefined;
+      if (cr.rows[0]) {
+        username = decryptSecret(cr.rows[0].username_enc);
+        password = decryptSecret(cr.rows[0].password_enc);
+      }
+      return { cam, username, password, siteId: cam.site_id };
+    });
+
+    if ('error' in info) {
+      res.status(400).json({ error: 'BAD_REQUEST', message: info.error });
+      return;
+    }
+
+    // Ensure the HLS transcode is running (server-side). Never blocks on frames.
+    await hlsManager.ensureSession(org, info.cam.id, {
+      host: info.cam.rtsp_host ?? '',
+      port: info.cam.rtsp_port,
+      path: info.cam.rtsp_path,
+      username: info.username,
+      password: info.password,
+    });
+
+    // Sign a short-lived session so segment requests can be authorized.
+    const session = createStreamSession({ organizationId: org, cameraId: info.cam.id, siteId: info.siteId });
+    const q = new URLSearchParams({ sid: session.sessionId, exp: String(session.expiresAt), sig: session.token });
+    res.json({
+      live: {
+        protocol: 'hls',
+        manifestUrl: `/api/cameras/${info.cam.id}/live/index.m3u8?${q.toString()}`,
+        expiresAt: session.expiresAt,
+      },
+    });
+  }),
+);
+
+/**
+ * Serve an HLS artifact (manifest or .ts segment). Authorization chain:
+ *   authenticated -> ACTIVE member of camera's org -> camera belongs to org (RLS)
+ *   -> valid + unexpired signed session token. Only then is the private segment
+ *   returned. A leaked URL cannot be used outside the owning tenant.
+ */
+camerasRouter.get(
+  '/:id/live/:artifact',
+  requirePermission('cameras:stream'),
+  asyncHandler(async (req, res) => {
+    const org = getCurrentOrganization(req);
+    const sid = String(req.query.sid ?? '');
+    const exp = Number(req.query.exp ?? 0);
+    const sig = String(req.query.sig ?? '');
+
+    const siteId = await tenantDb(req, async (db) => {
+      const cam = await requireTenantResource<{ id: string; site_id: string }>(db, 'cameras', req.params.id!, 'id, site_id');
+      return cam.site_id;
+    });
+    if (!verifyStreamToken({ organizationId: org, cameraId: req.params.id!, siteId, sessionId: sid, expiresAt: exp, token: sig })) {
+      res.status(403).json({ error: 'FORBIDDEN', message: 'Invalid or expired stream token' });
+      return;
+    }
+    try {
+      const data = await hlsManager.readArtifact(org, req.params.id!, req.params.artifact!);
+      const isManifest = req.params.artifact!.endsWith('.m3u8');
+      res.setHeader('Content-Type', isManifest ? 'application/vnd.apple.mpegurl' : 'video/mp2t');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.send(data);
+    } catch {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Stream artifact not ready' });
+    }
   }),
 );
 
