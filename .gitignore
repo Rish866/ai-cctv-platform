@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+server/.env
+web/.env
+
+# Local DB / runtime artifacts
+*.pid
+pgdata/
+.DS_Store
