@@ -48,28 +48,37 @@ export function createApp(): Express {
   app.use(express.json({ limit: '10mb' }));
   app.use(cookieParser());
 
+  // Rate limiting is disabled ONLY in the automated test environment, where a
+  // single app instance is hammered from one IP across many test cases (which
+  // would otherwise trip the limiter). Production/dev keep full protection.
+  const rateLimitingEnabled = config.env !== 'test';
+
   // Global rate limit.
-  app.use(
-    rateLimit({
-      windowMs: config.rateLimit.windowMs,
-      max: config.rateLimit.max,
-      standardHeaders: true,
-      legacyHeaders: false,
-    }),
-  );
+  if (rateLimitingEnabled) {
+    app.use(
+      rateLimit({
+        windowMs: config.rateLimit.windowMs,
+        max: config.rateLimit.max,
+        standardHeaders: true,
+        legacyHeaders: false,
+      }),
+    );
+  }
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'sentriai', ts: Date.now() }));
 
   // Stricter limit on auth endpoints (brute-force protection).
-  const authLimiter = rateLimit({
-    windowMs: config.rateLimit.windowMs,
-    max: config.rateLimit.authMax,
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use('/api/auth/login', authLimiter);
-  app.use('/api/auth/signup', authLimiter);
-  app.use('/api/auth/forgot-password', authLimiter);
+  if (rateLimitingEnabled) {
+    const authLimiter = rateLimit({
+      windowMs: config.rateLimit.windowMs,
+      max: config.rateLimit.authMax,
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+    app.use('/api/auth/login', authLimiter);
+    app.use('/api/auth/signup', authLimiter);
+    app.use('/api/auth/forgot-password', authLimiter);
+  }
 
   // Routes.
   app.use('/api/auth', authRouter);

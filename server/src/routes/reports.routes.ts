@@ -47,7 +47,9 @@ reportsRouter.post(
  * computed under RLS, so a report can only ever contain the current org's data.
  */
 reportsRouter.get(
-  '/:id/data',
+  // Constrain :id to a UUID so literal report routes (fire-safety, security)
+  // registered below are never captured by this param route.
+  '/:id([0-9a-fA-F-]{36})/data',
   requirePermission('reports:read'),
   asyncHandler(async (req, res) => {
     const data = await tenantDb(req, async (db) => {

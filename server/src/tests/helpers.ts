@@ -87,3 +87,89 @@ export async function buildResourceTree(t: TenantAgent): Promise<{
 
   return { siteId, cameraId, eventId, evidenceId };
 }
+
+
+const SNAPSHOT_B64 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+).toString('base64');
+
+/**
+ * Build a full SAFETY & SECURITY resource set for a tenant, exercising the
+ * add-on endpoints: an AI model, a zone + schedule, a camera, a monitored
+ * object, an AI rule, a fire incident (via engine ingestion) + its evidence,
+ * and an incident note.
+ */
+export async function buildSafetyTree(t: TenantAgent): Promise<{
+  siteId: string;
+  zoneId: string;
+  cameraId: string;
+  modelId: string;
+  scheduleId: string;
+  monitoredObjectId: string;
+  ruleId: string;
+  fireEventId: string;
+  fireEvidenceId: string;
+  noteId: string;
+}> {
+  const site = await t.agent.post('/api/sites').send({ name: 'Safety Site', timezone: 'UTC' }).expect(201);
+  const siteId = site.body.site.id;
+
+  const zone = await t.agent.post('/api/zones').send({ siteId, name: 'Chemical Storage', geometry: {} }).expect(201);
+  const zoneId = zone.body.zone.id;
+
+  const cam = await t.agent
+    .post('/api/cameras')
+    .send({ siteId, zoneId, name: 'Warehouse Cam 04', rtspHost: 'cam.local', rtspPath: '/s4', username: 'u', password: 'p' })
+    .expect(201);
+  const cameraId = cam.body.camera.id;
+
+  const model = await t.agent
+    .post('/api/ai-models')
+    .send({ modelType: 'FIRE', name: 'Fire Model', version: 'v1', confidenceThreshold: 0.7, isDemoAdapter: true })
+    .expect(201);
+  const modelId = model.body.model.id;
+
+  const schedule = await t.agent
+    .post('/api/zone-schedules')
+    .send({ zoneId, weekday: null, openMinute: 540, closeMinute: 1080, timezone: 'UTC' })
+    .expect(201);
+  const scheduleId = schedule.body.schedule.id;
+
+  const mobj = await t.agent
+    .post('/api/monitored-objects')
+    .send({ cameraId, zoneId, label: 'Pallet', region: {}, confirmMs: 3000 })
+    .expect(201);
+  const monitoredObjectId = mobj.body.object.id;
+
+  const rule = await t.agent
+    .post('/api/ai-rules')
+    .send({
+      cameraId,
+      zoneId,
+      ruleType: 'FIRE',
+      severity: 'CRITICAL',
+      minConfidence: 0.7,
+      cooldownSeconds: 30,
+      minDurationMs: 0,
+      notifyChannels: ['IN_APP', 'EMAIL'],
+      aiModelId: modelId,
+    })
+    .expect(201);
+  const ruleId = rule.body.rule.id;
+
+  // Fire detection via the engine (creates a CRITICAL incident + evidence).
+  const fire = await t.agent
+    .post('/api/events/ingest')
+    .send({ cameraId, eventType: 'FIRE', confidence: 0.92, snapshotBase64: SNAPSHOT_B64 })
+    .expect(201);
+  const fireEventId = fire.body.event.eventId;
+
+  const detail = await t.agent.get(`/api/events/${fireEventId}`).expect(200);
+  const fireEvidenceId = detail.body.evidence[0]?.id;
+
+  const note = await t.agent.post(`/api/events/${fireEventId}/notes`).send({ note: 'Dispatched security' }).expect(201);
+  const noteId = note.body.note.id;
+
+  return { siteId, zoneId, cameraId, modelId, scheduleId, monitoredObjectId, ruleId, fireEventId, fireEvidenceId, noteId };
+}
