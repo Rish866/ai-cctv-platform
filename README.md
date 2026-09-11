@@ -123,6 +123,11 @@ scripts/
 
 ## Getting started
 
+> **Deploying for free?** See **[DEPLOY.md](./DEPLOY.md)** for a step-by-step
+> zero-cost setup — Web UI on **Vercel**, API on **Render** free tier, Postgres
+> on **Neon** free tier, mapped to a custom domain (GoDaddy DNS). The live
+> camera/AI pipeline runs locally (no free always-on host for continuous video).
+
 ### Prerequisites
 
 - Node.js ≥ 20
