@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, wsUrl } from '../api';
 import { Badge, EmptyState, ErrorBox, Loading, useApi } from '../components';
 import { eventLabel } from '../safety';
 import { LivePlayer } from '../LivePlayer';
@@ -44,9 +44,9 @@ export function LiveMonitoring() {
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
-    // Subscribe to the tenant WebSocket channel; the server only sends THIS org's events.
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    // Subscribe to the tenant WebSocket channel (on the API origin); the server
+    // only sends THIS org's events.
+    const ws = new WebSocket(wsUrl());
     ws.onmessage = (m) => {
       try {
         const msg = JSON.parse(m.data);

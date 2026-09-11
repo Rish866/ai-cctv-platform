@@ -16,13 +16,22 @@ import { getMembership, listMemberships } from '../services/membership.service.j
 
 export const authRouter = Router();
 
+function cookieOptions() {
+  const sameSite = config.session.cookieSameSite as 'lax' | 'strict' | 'none';
+  return {
+    httpOnly: true,
+    // Browsers reject SameSite=None without Secure, so force Secure in that case.
+    secure: config.session.cookieSecure || sameSite === 'none',
+    sameSite,
+    path: '/',
+    ...(config.session.cookieDomain ? { domain: config.session.cookieDomain } : {}),
+  } as const;
+}
+
 function setSessionCookie(res: import('express').Response, sessionId: string): void {
   res.cookie(config.session.cookieName, signSessionId(sessionId), {
-    httpOnly: true,
-    secure: config.session.cookieSecure,
-    sameSite: 'lax',
+    ...cookieOptions(),
     maxAge: config.session.ttlHours * 3600 * 1000,
-    path: '/',
   });
 }
 
@@ -64,7 +73,7 @@ authRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     await destroySession(req.ctx!.sessionId);
-    res.clearCookie(config.session.cookieName, { path: '/' });
+    res.clearCookie(config.session.cookieName, cookieOptions());
     res.json({ ok: true });
   }),
 );

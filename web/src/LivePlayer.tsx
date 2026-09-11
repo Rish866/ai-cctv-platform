@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from './api';
+import { api, apiUrl } from './api';
 
 /**
  * LivePlayer — requests an authorized HLS session for a camera and plays it in
@@ -23,12 +23,22 @@ export function LivePlayer({ cameraId, onClose }: { cameraId: string; onClose: (
         const { default: Hls } = await import('hls.js');
         const res = await api.get<{ live: { manifestUrl: string; protocol: string } }>(`/cameras/${cameraId}/live`);
         if (cancelled) return;
-        const url = res.live.manifestUrl;
+        // Absolutize against the API origin so hls.js fetches the manifest +
+        // segments from api.garudai.in (with credentials), not the web origin.
+        const url = apiUrl(res.live.manifestUrl);
         const video = videoRef.current;
         if (!video) return;
 
         if (Hls.isSupported()) {
-          hls = new Hls({ lowLatencyMode: true, enableWorker: true });
+          hls = new Hls({
+            lowLatencyMode: true,
+            enableWorker: true,
+            // Send the session cookie cross-site so the API can authorize each
+            // manifest/segment request (the signed URL is verified server-side too).
+            xhrSetup: (xhr) => {
+              xhr.withCredentials = true;
+            },
+          });
           hls.loadSource(url);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {

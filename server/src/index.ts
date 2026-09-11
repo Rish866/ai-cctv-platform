@@ -11,21 +11,27 @@ async function main(): Promise<void> {
   // Ensure schema is up to date on boot.
   await runMigrations();
 
-  // AI adapter policy (fail closed, no fake production AI):
-  //   * production: register ONLY the real inference adapters. If no inference
-  //     service is configured, refuse to start rather than run without real AI
-  //     (the pipeline would otherwise fail closed with INFERENCE_UNAVAILABLE).
-  //   * non-production: register the explicitly-labelled DEMO adapters, plus the
-  //     real adapters if a service URL happens to be configured. The demo
-  //     adapter can NEVER run in production.
+  // AI adapter policy (never any fake production AI):
+  //   * production + REQUIRE_INFERENCE=true: register ONLY real inference
+  //     adapters, and REFUSE to start without INFERENCE_SERVICE_URL (full
+  //     fail-closed CCTV deployment).
+  //   * production + REQUIRE_INFERENCE not set: register the real adapter IF a
+  //     service URL is configured; otherwise boot with NO AI adapter and report
+  //     "Inference Offline" (lets the SaaS run on a free API host while the
+  //     camera/AI pipeline runs elsewhere). The demo adapter is NEVER used in
+  //     production.
+  //   * non-production: register the DEMO adapters (+ real if a URL is set).
   if (config.env === 'production') {
-    if (!config.inference.serviceUrl) {
+    if (config.inference.require && !config.inference.serviceUrl) {
       throw new Error(
-        'Refusing to start in production without INFERENCE_SERVICE_URL. The demo ' +
-          'AI adapter is disabled in production; a real inference service is required.',
+        'REQUIRE_INFERENCE=true but INFERENCE_SERVICE_URL is not set. A real ' +
+          'inference service is required for full CCTV mode. Unset REQUIRE_INFERENCE ' +
+          'to run the SaaS without live AI (status will show Inference Offline).',
       );
     }
-    registerProductionAdapters();
+    if (config.inference.serviceUrl) registerProductionAdapters();
+    // No serviceUrl + not required => no adapters registered; pipeline reports
+    // INFERENCE_UNAVAILABLE if invoked. Demo adapter stays disabled in prod.
   } else {
     registerDemoAdapters();
     if (config.inference.serviceUrl) registerProductionAdapters();

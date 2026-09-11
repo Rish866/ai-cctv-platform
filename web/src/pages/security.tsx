@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../api';
+import { api, apiUrl } from '../api';
 import { Badge, EmptyState, ErrorBox, Loading, Modal, StatCard, useApi } from '../components';
 import { eventLabel, INCIDENT_STATUSES } from '../safety';
 
@@ -153,7 +153,7 @@ function IncidentModal({ id, onClose, onChanged }: { id: string; onClose: () => 
 
   const loadEvidence = async (evidenceId: string) => {
     const r = await api.get<{ evidence: { url: string } }>(`/events/${id}/evidence/${evidenceId}/url`);
-    setEvUrl(r.evidence.url);
+    setEvUrl(apiUrl(r.evidence.url));
   };
 
   return (

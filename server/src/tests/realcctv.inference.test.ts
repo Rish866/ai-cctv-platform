@@ -67,13 +67,16 @@ describe('Production-vs-demo policy (spec §11, §38, §46)', () => {
     expect(d.isDemo).toBe(true);
   });
 
-  it('the startup guard (from index.ts) refuses production without an inference URL', () => {
-    // Mirror the exact guard used in index.ts main(). In production with no
-    // inference service URL, the app must refuse to start (never run demo AI).
-    const guard = (env: string, serviceUrl: string) => env === 'production' && !serviceUrl;
-    expect(guard('production', '')).toBe(true); // refuse
-    expect(guard('production', 'http://inference:8100')).toBe(false); // ok, real adapter
-    expect(guard('development', '')).toBe(false); // dev may use demo adapter
+  it('the startup guard (from index.ts) refuses production ONLY when inference is required but missing', () => {
+    // Mirror the exact guard used in index.ts main(). The demo adapter is never
+    // used in production. When REQUIRE_INFERENCE is set, the app refuses to boot
+    // without a real inference URL; otherwise it boots with AI reported offline.
+    const guard = (env: string, requireInference: boolean, serviceUrl: string) =>
+      env === 'production' && requireInference && !serviceUrl;
+    expect(guard('production', true, '')).toBe(true); // require + no URL => refuse
+    expect(guard('production', true, 'http://inference:8100')).toBe(false); // require + URL => ok
+    expect(guard('production', false, '')).toBe(false); // not required => boot (Inference Offline)
+    expect(guard('development', false, '')).toBe(false); // dev may use demo adapter
   });
 
   it('registerProductionAdapters registers a NON-demo FIRE adapter when URL set', async () => {

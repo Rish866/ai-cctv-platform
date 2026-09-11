@@ -1,0 +1,62 @@
+# Render blueprint — deploys the SentriAI API on Render's FREE web service tier.
+#
+# Free tier notes:
+#   * The service SLEEPS after ~15 min idle and cold-starts (~30-60s) on the next
+#     request. Fine for demos/portfolios; not for production traffic.
+#   * Postgres: use Neon's free tier (external managed DB) rather than a Render
+#     DB. Set APP_DATABASE_URL / ADMIN_DATABASE_URL to the Neon connection
+#     strings (see DEPLOY.md). Managed Postgres requires TLS — DATABASE_SSL is
+#     defaulted on in production by the app.
+#
+# The media worker + Python inference service are NOT deployed here (they need
+# always-on CPU and are not free). The API boots fine without them and reports
+# "Inference Offline"; run them locally when demoing real cameras (see DEPLOY.md).
+
+services:
+  - type: web
+    name: sentriai-api
+    runtime: node
+    plan: free
+    region: singapore # closest free region to India; change if you prefer
+    # Build the API workspace (compiles TS + copies SQL migrations into dist).
+    buildCommand: npm ci && npm --workspace server run build
+    startCommand: node server/dist/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT; the app binds process.env.PORT via config.port.
+      - key: PORT
+        value: "10000"
+      # Managed Postgres needs TLS.
+      - key: DATABASE_SSL
+        value: "true"
+      # We run the SaaS without a live inference service on the free tier.
+      - key: REQUIRE_INFERENCE
+        value: "false"
+      # ---- Secrets: set these in the Render dashboard (marked sync:false) ----
+      # Neon connection strings (app role = NOBYPASSRLS; admin role runs migrations).
+      - key: APP_DATABASE_URL
+        sync: false
+      - key: ADMIN_DATABASE_URL
+        sync: false
+      # Generate with: openssl rand -hex 32
+      - key: SESSION_SECRET
+        generateValue: true
+      # AES-256-GCM key — MUST be exactly 64 hex chars. Generate: openssl rand -hex 32
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        sync: false
+      - key: STORAGE_URL_SIGNING_KEY
+        generateValue: true
+      # Shared token for the media worker's internal API (only needed if you run
+      # the worker later). Generate: openssl rand -hex 32
+      - key: MEDIA_WORKER_TOKEN
+        generateValue: true
+      # Browser origin(s) allowed by CORS — your Vercel site on the custom domain.
+      - key: WEB_ORIGIN
+        value: https://garudai.in,https://www.garudai.in
+      # Cross-site cookies (web on garudai.in, API on api.garudai.in) need Secure
+      # + SameSite=None; the app sets this automatically when COOKIE_SECURE=true.
+      - key: COOKIE_SECURE
+        value: "true"

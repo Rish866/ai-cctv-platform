@@ -54,6 +54,13 @@ export const config = {
     cookieName: optional('SESSION_COOKIE_NAME', 'sentriai_session'),
     ttlHours: parseInt(optional('SESSION_TTL_HOURS', '12'), 10),
     cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',
+    // SameSite policy. Default: 'none' when Secure (cross-site: web on garudai.in
+    // calling api.garudai.in), else 'lax' for same-origin dev. Override via
+    // COOKIE_SAMESITE=lax|strict|none.
+    cookieSameSite: optional('COOKIE_SAMESITE', optional('COOKIE_SECURE', 'false') === 'true' ? 'none' : 'lax'),
+    // Optional cookie Domain (e.g. ".garudai.in") to share the session across
+    // subdomains. Empty => host-only cookie (default; fine when same registrable domain).
+    cookieDomain: optional('COOKIE_DOMAIN', ''),
   },
 
   rateLimit: {
@@ -92,6 +99,20 @@ export const config = {
     serviceUrl: optional('INFERENCE_SERVICE_URL', ''),
     timeoutMs: parseInt(optional('INFERENCE_TIMEOUT_MS', '5000'), 10),
     model: optional('INFERENCE_MODEL', 'yolo-generic'),
+    // When true, the API REFUSES to start in production without a real inference
+    // service (full fail-closed CCTV deployment). When false (default), the API
+    // boots without inference and reports "Inference Offline" — this lets the
+    // SaaS run on a free API host (Render/Neon) for demos while the camera + AI
+    // pipeline runs elsewhere/later. It NEVER enables fake AI either way.
+    require: optional('REQUIRE_INFERENCE', 'false') === 'true',
+  },
+
+  // Postgres SSL. Managed providers (Neon/Render/Supabase) require TLS. Default
+  // ON in production; can be forced via DATABASE_SSL=true|false. `noVerify`
+  // relaxes cert-chain verification (needed by some managed URLs without a CA).
+  dbSsl: {
+    enabled: optional('DATABASE_SSL', optional('NODE_ENV', 'development') === 'production' ? 'true' : 'false') === 'true',
+    noVerify: optional('DATABASE_SSL_NO_VERIFY', 'true') === 'true',
   },
 } as const;
 

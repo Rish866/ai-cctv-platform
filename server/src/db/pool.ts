@@ -8,13 +8,32 @@ const { Pool } = pg;
 pg.types.setTypeParser(1700 /* numeric */, (v) => (v === null ? null : parseFloat(v)));
 
 /**
+ * SSL settings for the connection. Managed Postgres (Neon/Render/Supabase)
+ * requires TLS; unix-socket/local dev does not. If the connection string is a
+ * unix socket (host=/...), SSL is skipped regardless of config.
+ */
+function sslFor(connectionString: string): pg.PoolConfig['ssl'] {
+  const isUnixSocket = /[?&]host=%2F|[?&]host=\//.test(connectionString) || connectionString.includes('host=/');
+  if (isUnixSocket || !config.dbSsl.enabled) return undefined;
+  // rejectUnauthorized:false lets us connect to managed URLs that don't ship a
+  // CA bundle in the connection string. The channel is still encrypted (TLS).
+  return config.dbSsl.noVerify ? { rejectUnauthorized: false } : true;
+}
+
+// Pool sizes are modest so we stay within free-tier Postgres connection limits
+// (Neon free ~ limited direct connections; use a pooled/-pooler URL there).
+const APP_POOL_MAX = parseInt(process.env.APP_POOL_MAX ?? '8', 10);
+const ADMIN_POOL_MAX = parseInt(process.env.ADMIN_POOL_MAX ?? '3', 10);
+
+/**
  * APP pool — every runtime request uses this. Connects as the NOSUPERUSER,
  * NOBYPASSRLS role `sentriai_app`, so PostgreSQL RLS is always enforced.
  */
 export const appPool = new Pool({
   connectionString: config.appDatabaseUrl,
-  max: 10,
+  max: APP_POOL_MAX,
   idleTimeoutMillis: 10_000,
+  ssl: sslFor(config.appDatabaseUrl),
 });
 
 /**
@@ -26,8 +45,9 @@ export const appPool = new Pool({
  */
 export const adminPool = new Pool({
   connectionString: config.adminDatabaseUrl,
-  max: 4,
+  max: ADMIN_POOL_MAX,
   idleTimeoutMillis: 10_000,
+  ssl: sslFor(config.adminDatabaseUrl),
 });
 
 export interface TenantContext {

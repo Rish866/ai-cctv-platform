@@ -10,8 +10,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * API base URL. In production the web app (garudai.in on Vercel) and the API
+ * (api.garudai.in on Render) are on different origins, so set VITE_API_URL at
+ * build time to the API's absolute URL. In local dev it's empty and requests go
+ * to the same origin (`/api`), proxied to the API by Vite. `credentials:
+ * 'include'` sends the httpOnly session cookie cross-site (cookie is
+ * SameSite=None; Secure in production).
+ */
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE_URL}/api${path}`, {
     method,
     credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -38,6 +48,25 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
   del: <T>(path: string) => request<T>('DELETE', path),
 };
+
+/**
+ * Absolutize a server-relative path (e.g. a signed evidence URL "/api/...", or
+ * an HLS manifest URL) against the API origin so it loads from the API host
+ * (api.garudai.in) rather than the web host. Pass-through for absolute URLs.
+ */
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
+/** WebSocket URL for the tenant realtime channel, on the API origin. */
+export function wsUrl(): string {
+  if (API_BASE_URL) {
+    return `${API_BASE_URL.replace(/^http/i, 'ws')}/ws`;
+  }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}/ws`;
+}
 
 export interface Membership {
   organizationId: string;
