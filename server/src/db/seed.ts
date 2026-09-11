@@ -9,7 +9,7 @@ import { config } from '../config.js';
  * caller's org, and demo is just another tenant.
  */
 async function seed(): Promise<void> {
-  const email = 'demo@sentriai.example';
+  const email = 'demo@garudai.example';
   const passwordHash = await hashPassword('demo-password-123');
 
   const existing = await adminPool.query('SELECT id FROM organizations WHERE slug = $1', [config.demoOrgSlug]);
@@ -39,7 +39,7 @@ async function seed(): Promise<void> {
       `SELECT set_config('app.current_org',$1,true), set_config('app.current_user',$2,true)`,
       [orgId, userId],
     );
-    await client.query(`INSERT INTO organizations(id,name,slug,is_demo) VALUES ($1,'SentriAI Demo Co',$2,true)`, [orgId, config.demoOrgSlug]);
+    await client.query(`INSERT INTO organizations(id,name,slug,is_demo) VALUES ($1,'GarudAI Demo Co',$2,true)`, [orgId, config.demoOrgSlug]);
     await client.query(`INSERT INTO organization_members(organization_id,user_id,role,status) VALUES ($1,$2,'OWNER','ACTIVE')`, [orgId, userId]);
     await client.query(`INSERT INTO subscriptions(organization_id,plan,status,camera_limit) VALUES ($1,'GROWTH','ACTIVE',50)`, [orgId]);
     const site = (await client.query<{ id: string }>(`INSERT INTO sites(organization_id,name,address) VALUES ($1,'Demo Warehouse','123 Demo St') RETURNING id`, [orgId])).rows[0]!.id;

@@ -46,12 +46,12 @@ export const config = {
   storage: {
     provider: optional('STORAGE_PROVIDER', 'local'),
     localRoot: optional('STORAGE_LOCAL_ROOT', './.storage'),
-    bucket: optional('STORAGE_BUCKET', 'sentriai-evidence'),
+    bucket: optional('STORAGE_BUCKET', 'garudai-evidence'),
     signedUrlTtlSeconds: parseInt(optional('STORAGE_SIGNED_URL_TTL_SECONDS', '300'), 10),
   },
 
   session: {
-    cookieName: optional('SESSION_COOKIE_NAME', 'sentriai_session'),
+    cookieName: optional('SESSION_COOKIE_NAME', 'garudai_session'),
     ttlHours: parseInt(optional('SESSION_TTL_HOURS', '12'), 10),
     cookieSecure: optional('COOKIE_SECURE', 'false') === 'true',
     // SameSite policy. Default: 'none' when Secure (cross-site: web on garudai.in

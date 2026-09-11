@@ -1,5 +1,5 @@
 -- =============================================================================
--- SentriAI — Initial schema + Row Level Security (RLS)
+-- GarudAI — Initial schema + Row Level Security (RLS)
 -- =============================================================================
 -- Security model
 -- --------------
@@ -10,7 +10,7 @@
 --   2. Backend authorization (tenant context middleware).
 --   3. Frontend (display only — never trusted for security).
 --
--- Every request runs as the NON-SUPERUSER role `sentriai_app`, which has
+-- Every request runs as the NON-SUPERUSER role `garudai_app`, which has
 -- NOBYPASSRLS. The backend opens a transaction and sets two GUCs:
 --
 --   SET LOCAL app.current_org        = '<organization uuid>';
@@ -482,10 +482,10 @@ CREATE POLICY sessions_delete ON sessions
 -- The app role gets DML on all tables but is NOSUPERUSER + NOBYPASSRLS, so RLS
 -- fully governs what it can touch. It gets NO DDL and cannot disable RLS.
 -- =============================================================================
-GRANT USAGE ON SCHEMA app TO sentriai_app;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO sentriai_app;
-GRANT USAGE ON SCHEMA public TO sentriai_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sentriai_app;
+GRANT USAGE ON SCHEMA app TO garudai_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO garudai_app;
+GRANT USAGE ON SCHEMA public TO garudai_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO garudai_app;
 -- Future tables created by migrations (superuser) — grant automatically.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sentriai_app;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO garudai_app;

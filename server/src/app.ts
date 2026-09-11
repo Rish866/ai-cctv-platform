@@ -67,7 +67,7 @@ export function createApp(): Express {
     );
   }
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'sentriai', ts: Date.now() }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'garudai', ts: Date.now() }));
 
   // Stricter limit on auth endpoints (brute-force protection).
   if (rateLimitingEnabled) {

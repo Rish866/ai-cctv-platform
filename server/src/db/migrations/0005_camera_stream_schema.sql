@@ -1,5 +1,5 @@
 -- =============================================================================
--- SentriAI ADD-ON — Real CCTV/RTSP: camera streaming columns + health tables
+-- GarudAI ADD-ON — Real CCTV/RTSP: camera streaming columns + health tables
 -- =============================================================================
 -- Runs after 0004 (enum values committed). Purely ADDITIVE:
 --   * new columns on cameras for stream/inference/health (safe defaults keep
@@ -91,4 +91,4 @@ BEGIN
   END LOOP;
 END $$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON camera_health_events, inference_stats TO sentriai_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON camera_health_events, inference_stats TO garudai_app;

@@ -1,4 +1,4 @@
-# SentriAI — Multi-Tenant AI CCTV SaaS
+# GarudAI — Multi-Tenant AI CCTV SaaS
 
 AI-powered CCTV monitoring for businesses. Each customer signs up, gets a fully
 **isolated organization/workspace**, and manages their own sites, cameras, AI
@@ -19,7 +19,7 @@ still caught by the others:
 1. **PostgreSQL Row Level Security (deepest layer).** Every tenant-owned table
    has `organization_id UUID NOT NULL` and RLS policies for
    SELECT/INSERT/UPDATE/DELETE. The application connects as a **non-superuser
-   role (`sentriai_app`) with `NOBYPASSRLS`**, so the database itself refuses to
+   role (`garudai_app`) with `NOBYPASSRLS`**, so the database itself refuses to
    return or mutate rows outside the caller's organization. Policies read the
    current tenant from transaction-local settings:
 
@@ -151,7 +151,7 @@ openssl rand -hex 32   # CREDENTIAL_ENCRYPTION_KEY (must be 64 hex chars)
 
 Create two roles (see `.env.example` for connection strings):
 
-- `sentriai_app` — `NOSUPERUSER NOBYPASSRLS` (application / RLS-enforced)
+- `garudai_app` — `NOSUPERUSER NOBYPASSRLS` (application / RLS-enforced)
 - a superuser — migrations only (never serves requests)
 
 ### Run migrations + seed a demo org
@@ -309,7 +309,7 @@ keys and DB passwords all come from environment variables.
 
 ## Real CCTV / RTSP + production AI inference (add-on)
 
-SentriAI can connect to a real IP camera/NVR over RTSP, continuously ingest
+GarudAI can connect to a real IP camera/NVR over RTSP, continuously ingest
 frames, run **real** computer-vision inference, and drive the existing event →
 evidence → notification → dashboard pipeline — all tenant-isolated. This is an
 additive layer; nothing in the existing platform changed.
@@ -368,7 +368,7 @@ docker compose up --build
 # API + web UI on http://localhost:4000  (inference + worker stay on the private network)
 ```
 
-Services: `db` (Postgres, creates the `sentriai_app` NOBYPASSRLS role),
+Services: `db` (Postgres, creates the `garudai_app` NOBYPASSRLS role),
 `inference` (FastAPI CV service), `api` (API + built SPA), `media-worker`.
 For GPU inference, install the NVIDIA container toolkit and uncomment the `deploy`
 block under the `inference` service; supply a trained detection model via
@@ -397,7 +397,7 @@ npm run dev:web
    `/cam/realmonitor?channel=1&subtype=0`, generic `/stream1`. Format:
    `rtsp://USERNAME:PASSWORD@CAMERA_IP:554/STREAM_PATH` (placeholders only — never
    commit a real password).
-2. **Create the camera** in SentriAI (Cameras → Add camera): name, site, RTSP
+2. **Create the camera** in GarudAI (Cameras → Add camera): name, site, RTSP
    host/IP, port, path, stream profile, username, password, and optionally enable
    AI inference + set inference FPS.
 3. **Test connection** — click *Test*. The server probes the RTSP stream with

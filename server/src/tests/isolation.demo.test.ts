@@ -21,7 +21,7 @@ describe('Demo mode isolation', () => {
 
     // Create a demo org with its own data (as the seed would).
     demoOrgId = (await adminPool.query<{ id: string }>('SELECT gen_random_uuid() AS id')).rows[0]!.id;
-    const demoUser = (await adminPool.query<{ id: string }>(`INSERT INTO users(email,password_hash,full_name) VALUES('demo@sentriai.example','x','Demo') RETURNING id`)).rows[0]!.id;
+    const demoUser = (await adminPool.query<{ id: string }>(`INSERT INTO users(email,password_hash,full_name) VALUES('demo@garudai.example','x','Demo') RETURNING id`)).rows[0]!.id;
     const client = await appPool.connect();
     try {
       await client.query('BEGIN');

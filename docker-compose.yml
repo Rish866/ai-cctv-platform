@@ -1,4 +1,4 @@
-# SentriAI full stack — Postgres + API/web + media worker + inference service.
+# GarudAI full stack — Postgres + API/web + media worker + inference service.
 #
 # This ADDS the real-CCTV services; the existing app/db setup is unchanged.
 # Copy .env.example -> .env and set strong secrets before running:
@@ -17,12 +17,12 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
-      POSTGRES_DB: sentriai
+      POSTGRES_DB: garudai
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sentriai"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d garudai"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -52,8 +52,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: "4000"
-      APP_DATABASE_URL: postgresql://sentriai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/sentriai
-      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/sentriai
+      APP_DATABASE_URL: postgresql://garudai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/garudai
+      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/garudai
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY}
       STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?set STORAGE_URL_SIGNING_KEY}
@@ -78,8 +78,8 @@ services:
     command: ["node", "server/dist/media-worker.entry.js"]
     environment:
       NODE_ENV: production
-      APP_DATABASE_URL: postgresql://sentriai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/sentriai
-      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/sentriai
+      APP_DATABASE_URL: postgresql://garudai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/garudai
+      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/garudai
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
       STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?set STORAGE_URL_SIGNING_KEY}

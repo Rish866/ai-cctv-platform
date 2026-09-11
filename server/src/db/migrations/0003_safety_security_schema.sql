@@ -1,5 +1,5 @@
 -- =============================================================================
--- SentriAI ADD-ON — Safety & Security AI: schema, columns, new tenant tables
+-- GarudAI ADD-ON — Safety & Security AI: schema, columns, new tenant tables
 -- =============================================================================
 -- Runs after 0002 (enum values committed). Purely ADDITIVE:
 --   * extends ai_rules with cooldown / min-duration / notification-channel config
@@ -186,4 +186,4 @@ END $$;
 -- =============================================================================
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   ai_models, zone_schedules, monitored_objects, incident_notes, alert_cooldowns
-  TO sentriai_app;
+  TO garudai_app;

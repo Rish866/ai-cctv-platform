@@ -27,7 +27,7 @@ const ADMIN_POOL_MAX = parseInt(process.env.ADMIN_POOL_MAX ?? '3', 10);
 
 /**
  * APP pool — every runtime request uses this. Connects as the NOSUPERUSER,
- * NOBYPASSRLS role `sentriai_app`, so PostgreSQL RLS is always enforced.
+ * NOBYPASSRLS role `garudai_app`, so PostgreSQL RLS is always enforced.
  */
 export const appPool = new Pool({
   connectionString: config.appDatabaseUrl,

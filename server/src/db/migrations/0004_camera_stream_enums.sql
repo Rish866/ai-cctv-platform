@@ -1,5 +1,5 @@
 -- =============================================================================
--- SentriAI ADD-ON — Real CCTV/RTSP: camera_status enum extensions ONLY
+-- GarudAI ADD-ON — Real CCTV/RTSP: camera_status enum extensions ONLY
 -- =============================================================================
 -- Isolated file: new enum values must be COMMITTED before migration 0005 can
 -- use them (defaults / data). Purely ADDITIVE — no existing value changes, so

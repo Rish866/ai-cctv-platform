@@ -1,8 +1,8 @@
 {
-  "name": "sentriai",
+  "name": "garudai",
   "version": "1.0.0",
   "private": true,
-  "description": "SentriAI — production-ready multi-tenant AI CCTV SaaS platform with absolute tenant isolation (PostgreSQL RLS + backend authorization).",
+  "description": "GarudAI — production-ready multi-tenant AI CCTV SaaS platform with absolute tenant isolation (PostgreSQL RLS + backend authorization).",
   "workspaces": [
     "server",
     "web"

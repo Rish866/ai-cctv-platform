@@ -1,4 +1,4 @@
-# Render blueprint — deploys the SentriAI API on Render's FREE web service tier.
+# Render blueprint — deploys the GarudAI API on Render's FREE web service tier.
 #
 # Free tier notes:
 #   * The service SLEEPS after ~15 min idle and cold-starts (~30-60s) on the next
@@ -14,7 +14,7 @@
 
 services:
   - type: web
-    name: sentriai-api
+    name: garudai-api
     runtime: node
     plan: free
     region: singapore # closest free region to India; change if you prefer

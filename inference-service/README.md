@@ -1,8 +1,8 @@
-# SentriAI Inference Service
+# GarudAI Inference Service
 
 A standalone **real computer-vision** inference microservice (FastAPI + OpenCV,
 optional ONNX Runtime). It receives a frame (JPEG/PNG bytes or base64) and
-returns detections using the stable detection contract the SentriAI API expects.
+returns detections using the stable detection contract the GarudAI API expects.
 
 This service performs **actual image analysis** — it never fabricates or randomly
 generates detections. If a requested model/backend is not loaded, the relevant

@@ -1,6 +1,6 @@
-# Deploy SentriAI for FREE on `garudai.in`
+# Deploy GarudAI for FREE on `garudai.in`
 
-This guide deploys the SentriAI SaaS at **$0/month** using three free tiers:
+This guide deploys the GarudAI SaaS at **$0/month** using three free tiers:
 
 | Piece | Host (free) | URL |
 |-------|-------------|-----|
@@ -28,7 +28,7 @@ You need free accounts on **GitHub** (you have it), **Neon**, **Render**, and
 ## Step 1 — Database on Neon (free Postgres)
 
 1. Go to <https://neon.tech> → sign up (use "Continue with GitHub").
-2. **Create project** → name `sentriai`, region closest to you (e.g. AWS
+2. **Create project** → name `garudai`, region closest to you (e.g. AWS
    `ap-southeast-1` Singapore). Postgres 16.
 3. After creation, open **Dashboard → Connection Details**. Copy the
    **pooled** connection string (it contains `-pooler` in the host). It looks like:
@@ -40,24 +40,24 @@ You need free accounts on **GitHub** (you have it), **Neon**, **Render**, and
 4. **Create the RLS app role.** Open Neon's **SQL Editor** and run (pick your own
    strong password):
    ```sql
-   CREATE ROLE sentriai_app LOGIN PASSWORD 'PUT_A_STRONG_PASSWORD'
+   CREATE ROLE garudai_app LOGIN PASSWORD 'PUT_A_STRONG_PASSWORD'
      NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-   GRANT USAGE ON SCHEMA public TO sentriai_app;
+   GRANT USAGE ON SCHEMA public TO garudai_app;
    ```
    > This is **required for security**: the API connects as this NOBYPASSRLS role
    > so PostgreSQL Row Level Security is enforced (tenant isolation). The owner
    > role is used only for migrations.
 5. Build the **app** URL by taking the owner URL and swapping the
-   username:password for `sentriai_app:PUT_A_STRONG_PASSWORD` (keep the same host
+   username:password for `garudai_app:PUT_A_STRONG_PASSWORD` (keep the same host
    / `?sslmode=require`). This is your `APP_DATABASE_URL`.
 
    You now have two strings:
    - `ADMIN_DATABASE_URL` = the `neondb_owner:...` one
-   - `APP_DATABASE_URL`   = the `sentriai_app:...` one
+   - `APP_DATABASE_URL`   = the `garudai_app:...` one
 
 > Migrations create the schema + all RLS policies automatically on first API
 > boot — you don't run anything manually. The app grants the new tables to
-> `sentriai_app` as part of the migration.
+> `garudai_app` as part of the migration.
 
 ---
 
@@ -94,7 +94,7 @@ that one yourself.)
    | Key | Value |
    |-----|-------|
    | `NODE_ENV` | `production` |
-   | `APP_DATABASE_URL` | *(the `sentriai_app` Neon URL from Step 1.5)* |
+   | `APP_DATABASE_URL` | *(the `garudai_app` Neon URL from Step 1.5)* |
    | `ADMIN_DATABASE_URL` | *(the `neondb_owner` Neon URL from Step 1.3)* |
    | `DATABASE_SSL` | `true` |
    | `SESSION_SECRET` | *(from Step 2)* |
@@ -106,12 +106,12 @@ that one yourself.)
    | `WEB_ORIGIN` | `https://garudai.in,https://www.garudai.in` |
 
 5. **Create Web Service.** Watch the deploy log — you should see
-   `[migrate] up to date` then `SentriAI API listening`. Render gives you a URL
-   like `https://sentriai-api.onrender.com`.
-6. Test it: open `https://sentriai-api.onrender.com/api/health` → `{"ok":true,...}`.
+   `[migrate] up to date` then `GarudAI API listening`. Render gives you a URL
+   like `https://garudai-api.onrender.com`.
+6. Test it: open `https://garudai-api.onrender.com/api/health` → `{"ok":true,...}`.
 
 > If the log shows a DB connection error, re-check the two Neon URLs (they must
-> end with `?sslmode=require`) and that `sentriai_app` was created in Step 1.4.
+> end with `?sslmode=require`) and that `garudai_app` was created in Step 1.4.
 
 ---
 
@@ -164,7 +164,7 @@ You'll map:
   - Apex `garudai.in` → **A** → `76.76.21.21`
   - `www` → **CNAME** → `cname.vercel-dns.com`
 - **Render:** Service → **Settings → Custom Domains** → add `api.garudai.in`.
-  Render shows a **CNAME target** like `sentriai-api.onrender.com`.
+  Render shows a **CNAME target** like `garudai-api.onrender.com`.
 
 ### 5b. Create the records in GoDaddy
 GoDaddy → **My Products → Domains → garudai.in → DNS → Manage Zones** (or
@@ -174,7 +174,7 @@ GoDaddy → **My Products → Domains → garudai.in → DNS → Manage Zones** 
 |------|------|-------|-----|
 | A | `@` | `76.76.21.21` *(use the IP Vercel shows)* | 1 hr |
 | CNAME | `www` | `cname.vercel-dns.com` *(use what Vercel shows)* | 1 hr |
-| CNAME | `api` | `sentriai-api.onrender.com` *(the target Render shows)* | 1 hr |
+| CNAME | `api` | `garudai-api.onrender.com` *(the target Render shows)* | 1 hr |
 
 Notes:
 - If GoDaddy already has a default `A @ → Parked` record, **edit** it to the
@@ -219,7 +219,7 @@ uvicorn app.main:app --port 8100         # http://localhost:8100
 Then run the media worker in another terminal, pointed at your **cloud** API and
 DB (so detections land in the same tenant data):
 ```bash
-export APP_DATABASE_URL="<your Neon sentriai_app URL>"
+export APP_DATABASE_URL="<your Neon garudai_app URL>"
 export ADMIN_DATABASE_URL="<your Neon owner URL>"
 export CREDENTIAL_ENCRYPTION_KEY="<same 64-hex as Render>"
 export MEDIA_WORKER_TOKEN="<same as Render>"

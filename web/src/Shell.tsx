@@ -34,7 +34,7 @@ export function Shell() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="dot" /> SentriAI
+          <span className="dot" /> GarudAI
         </div>
         <nav className="nav">
           {NAV.map((item, i) =>

@@ -5,5 +5,5 @@ process.env.CREDENTIAL_ENCRYPTION_KEY ||=
   '1111111111111111111111111111111111111111111111111111111111111111';
 process.env.SESSION_SECRET ||= 'test-session-secret';
 process.env.STORAGE_URL_SIGNING_KEY ||= 'test-storage-signing-key';
-process.env.STORAGE_LOCAL_ROOT ||= '/tmp/sentriai-test-storage';
+process.env.STORAGE_LOCAL_ROOT ||= '/tmp/garudai-test-storage';
 process.env.NODE_ENV ||= 'test';

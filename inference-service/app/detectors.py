@@ -1,5 +1,5 @@
 """
-Real computer-vision detectors for SentriAI.
+Real computer-vision detectors for GarudAI.
 
 Every detector here performs ACTUAL image analysis. None fabricate or randomly
 generate detections. Bounding boxes are returned normalized to [0, 1].

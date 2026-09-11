@@ -8,7 +8,7 @@ export function Landing() {
   return (
     <div className="public">
       <div className="nav-top">
-        <div className="brand"><span className="dot" /> SentriAI</div>
+        <div className="brand"><span className="dot" /> GarudAI</div>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link className="btn secondary" to="/login">Sign in</Link>
           <Link className="btn" to="/signup">Start free trial</Link>
@@ -17,7 +17,7 @@ export function Landing() {
       <section className="hero">
         <h1>AI CCTV monitoring<br />that never mixes tenants.</h1>
         <p>
-          SentriAI turns your existing cameras into an intelligent monitoring platform — person &
+          GarudAI turns your existing cameras into an intelligent monitoring platform — person &
           vehicle detection, intrusion, PPE compliance, and more. Every customer gets a fully
           isolated workspace, enforced all the way down to the database.
         </p>
@@ -40,7 +40,7 @@ export function Landing() {
         ))}
       </div>
       <p className="muted" style={{ textAlign: 'center', marginTop: 48 }}>
-        © {new Date().getFullYear()} SentriAI. Built security-first.
+        © {new Date().getFullYear()} GarudAI. Built security-first.
       </p>
     </div>
   );
@@ -71,7 +71,7 @@ export function Login() {
   return (
     <div className="auth-wrap">
       <form className="card auth-card" onSubmit={submit}>
-        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> SentriAI</div>
+        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> GarudAI</div>
         <h2>Welcome back</h2>
         <p className="muted">Sign in to your workspace.</p>
         <label>Email</label>
@@ -118,7 +118,7 @@ export function Signup() {
   return (
     <div className="auth-wrap">
       <form className="card auth-card" onSubmit={submit}>
-        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> SentriAI</div>
+        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> GarudAI</div>
         <h2>Start your free trial</h2>
         <p className="muted">Create an isolated organization for your business.</p>
         <div className="form-row">
@@ -163,7 +163,7 @@ export function ForgotPassword() {
   return (
     <div className="auth-wrap">
       <form className="card auth-card" onSubmit={submit}>
-        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> SentriAI</div>
+        <div className="brand" style={{ padding: '0 0 12px' }}><span className="dot" /> GarudAI</div>
         <h2>Reset password</h2>
         {done ? (
           <p className="success">If an account exists for that email, a reset link has been sent.</p>

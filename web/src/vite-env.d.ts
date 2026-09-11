@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
   /**
-   * Absolute base URL of the SentriAI API (e.g. https://api.garudai.in). Set at
+   * Absolute base URL of the GarudAI API (e.g. https://api.garudai.in). Set at
    * build time on Vercel. Empty in local dev (requests go same-origin via the
    * Vite proxy).
    */

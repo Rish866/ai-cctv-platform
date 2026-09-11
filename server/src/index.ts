@@ -43,7 +43,7 @@ async function main(): Promise<void> {
 
   server.listen(config.port, () => {
     // eslint-disable-next-line no-console
-    console.log(`SentriAI API listening on :${config.port} (env=${config.env})`);
+    console.log(`GarudAI API listening on :${config.port} (env=${config.env})`);
   });
 
   const shutdown = async () => {

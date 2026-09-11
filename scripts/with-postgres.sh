@@ -9,22 +9,22 @@
 #   scripts/with-postgres.sh <command> [args...]
 #
 # Environment exported to the child command:
-#   PGHOST=/var/run/pgsock  PGPORT=5433  PGUSER=postgres  PGDATABASE=sentriai
+#   PGHOST=/var/run/pgsock  PGPORT=5433  PGUSER=postgres  PGDATABASE=garudai
 #   DATABASE_URL / APP_DATABASE_URL (see below)
 #
 # Two roles are created:
 #   postgres  — superuser (bypasses RLS)  — used ONLY for migrations/admin
-#   sentriai_app — NOSUPERUSER, NOBYPASSRLS — used by the application at runtime,
+#   garudai_app — NOSUPERUSER, NOBYPASSRLS — used by the application at runtime,
 #                  so Row Level Security is actually enforced.
 #
 set -euo pipefail
 
 PGBIN=/usr/bin
-PGDATA=/var/lib/pgsql/sentriai-data
+PGDATA=/var/lib/pgsql/garudai-data
 SOCKDIR=/var/run/pgsock
 PGPORT=5433
-APP_DB=sentriai
-APP_ROLE=sentriai_app
+APP_DB=garudai
+APP_ROLE=garudai_app
 APP_ROLE_PASS=app_dev_password
 
 log() { echo "[with-postgres] $*" >&2; }

@@ -305,7 +305,7 @@ export function Onboarding() {
   ] as const;
   return (
     <div>
-      <h1 className="page-title">Welcome to SentriAI 🎉</h1>
+      <h1 className="page-title">Welcome to GarudAI 🎉</h1>
       <p className="page-sub">Let's get your isolated workspace set up in a few steps.</p>
       <div className="grid cols-3" style={{ marginTop: 16 }}>
         {steps.map(([t, d, to], i) => (

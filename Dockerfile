@@ -1,4 +1,4 @@
-# SentriAI API + built web UI (single image). Also used for the media worker
+# GarudAI API + built web UI (single image). Also used for the media worker
 # (different command). Includes FFmpeg for RTSP probing/ingest/HLS.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app

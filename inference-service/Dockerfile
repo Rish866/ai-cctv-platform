@@ -1,4 +1,4 @@
-# SentriAI Inference Service (FastAPI + OpenCV, optional ONNX Runtime).
+# GarudAI Inference Service (FastAPI + OpenCV, optional ONNX Runtime).
 FROM python:3.11-slim
 WORKDIR /app
 # OpenCV headless needs a few system libs.

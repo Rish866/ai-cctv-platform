@@ -1,5 +1,5 @@
 -- =============================================================================
--- SentriAI ADD-ON — Safety & Security AI: enum extensions ONLY
+-- GarudAI ADD-ON — Safety & Security AI: enum extensions ONLY
 -- =============================================================================
 -- This migration is intentionally isolated because PostgreSQL requires new enum
 -- values added with ALTER TYPE ... ADD VALUE to be COMMITTED before they can be
