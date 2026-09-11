@@ -1,0 +1,28 @@
+{
+  "name": "garudai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GarudAI — production-ready multi-tenant AI CCTV SaaS platform with absolute tenant isolation (PostgreSQL RLS + backend authorization).",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "db:migrate": "npm --workspace server run db:migrate",
+    "db:seed": "npm --workspace server run db:seed",
+    "build": "npm --workspace server run build && npm --workspace web run build",
+    "vercel-build": "npm --prefix web install && npm --prefix web run build",
+    "test": "bash scripts/with-postgres.sh npm --workspace server run test:ci",
+    "test:security": "bash scripts/with-postgres.sh npm --workspace server run test:security",
+    "pentest": "npm run build && bash scripts/with-postgres.sh bash scripts/pentest-gate.sh",
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
+  }
+}

@@ -1,0 +1,102 @@
+# GarudAI full stack — Postgres + API/web + media worker + inference service.
+#
+# This ADDS the real-CCTV services; the existing app/db setup is unchanged.
+# Copy .env.example -> .env and set strong secrets before running:
+#   docker compose up --build
+#
+# Notes:
+#   * The app connects as the NON-superuser, NOBYPASSRLS role so RLS is enforced.
+#   * The media worker + inference service run as SEPARATE containers so heavy
+#     FFmpeg/CV work never blocks the API.
+#   * Only the web/API port is published; inference + worker stay on the private
+#     compose network. RTSP credentials never leave the server side.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+      POSTGRES_DB: garudai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d garudai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  inference:
+    build: ./inference-service
+    environment:
+      INFERENCE_SERVICE_TOKEN: ${INFERENCE_SERVICE_TOKEN:-}
+      ONNX_MODEL_PATH: ${ONNX_MODEL_PATH:-}
+      ONNX_LABELS: ${ONNX_LABELS:-}
+    # For GPU: install nvidia-container-toolkit and uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ capabilities: ["gpu"] }]
+    expose:
+      - "8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8100/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  api:
+    build: .
+    command: ["node", "server/dist/index.js"]
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      APP_DATABASE_URL: postgresql://garudai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/garudai
+      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/garudai
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY}
+      STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?set STORAGE_URL_SIGNING_KEY}
+      MEDIA_WORKER_TOKEN: ${MEDIA_WORKER_TOKEN:?set MEDIA_WORKER_TOKEN}
+      MEDIA_HLS_ROOT: /data/hls
+      STORAGE_LOCAL_ROOT: /data/storage
+      INFERENCE_SERVICE_URL: http://inference:8100
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:4000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    volumes:
+      - mediadata:/data
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      inference:
+        condition: service_started
+
+  media-worker:
+    build: .
+    command: ["node", "server/dist/media-worker.entry.js"]
+    environment:
+      NODE_ENV: production
+      APP_DATABASE_URL: postgresql://garudai_app:${APP_DB_PASSWORD:-app_dev_password}@db:5432/garudai
+      ADMIN_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@db:5432/garudai
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?set CREDENTIAL_ENCRYPTION_KEY}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      STORAGE_URL_SIGNING_KEY: ${STORAGE_URL_SIGNING_KEY:?set STORAGE_URL_SIGNING_KEY}
+      MEDIA_WORKER_TOKEN: ${MEDIA_WORKER_TOKEN:?set MEDIA_WORKER_TOKEN}
+      MEDIA_API_BASE_URL: http://api:4000
+      MEDIA_HLS_ROOT: /data/hls
+      STORAGE_LOCAL_ROOT: /data/storage
+      INFERENCE_SERVICE_URL: http://inference:8100
+      ALLOW_VIDEO_FILE_SOURCE: ${ALLOW_VIDEO_FILE_SOURCE:-false}
+    volumes:
+      - mediadata:/data
+    depends_on:
+      api:
+        condition: service_started
+      inference:
+        condition: service_started
+
+volumes:
+  pgdata:
+  mediadata:
