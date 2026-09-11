@@ -117,25 +117,36 @@ that one yourself.)
 
 ## Step 4 — Web UI on Vercel (free)
 
+This repo is an npm **monorepo**; the web app lives in `web/`. The reliable way
+to deploy it on Vercel is to point Vercel's **Root Directory** at `web/` so it
+auto-detects the Vite app (no custom build command needed).
+
 1. Go to <https://vercel.com> → sign up with GitHub → **Add New → Project** →
    import `Rish866/ai-cctv-platform`.
-2. Vercel reads the repo's `vercel.json`, so leave the framework as **Other**.
-   Confirm:
-   - **Build Command:** `npm ci && npm --workspace web run build`
-   - **Output Directory:** `web/dist`
-3. **Environment Variables → add:**
+2. In the import screen (or later under **Settings → Build & Deployment**):
+   - **Root Directory:** click **Edit** and set it to **`web`**. ✅ (this is the
+     key setting — it fixes the `No workspaces found: --workspace=web` error).
+   - **Framework Preset:** **Vite** (Vercel auto-detects it once Root = `web`).
+   - **Build Command / Install / Output:** leave as **default** (Vite →
+     `vite build` → `dist`). The included `web/vercel.json` adds SPA routing.
+3. **Environment Variables → add** (Production + Preview):
 
    | Key | Value |
    |-----|-------|
    | `VITE_API_URL` | `https://api.garudai.in` |
 
    > This bakes the API origin into the frontend at build time so it calls your
-   > Render API (with cookies) instead of itself. You must set this **before** the
-   > first build (or redeploy after adding it).
+   > Render API (with cookies) instead of itself. Set it **before** the first
+   > build (or add it and **Redeploy** — Vercel bakes env vars at build time).
 4. **Deploy.** You get a `https://<project>.vercel.app` URL. Open it — the
    landing page loads. (Login won't work until DNS/HTTPS + custom domains are set,
    because cross-site cookies need the real `garudai.in` / `api.garudai.in`
    HTTPS origins — see Step 5.)
+
+   > **Do NOT** set Root Directory to the repo root with a
+   > `npm --workspace web ...` build command — Vercel's isolated install doesn't
+   > expose the monorepo workspaces there, which is exactly the
+   > `No workspaces found: --workspace=web` failure. Root = `web` avoids it.
 
 ---
 

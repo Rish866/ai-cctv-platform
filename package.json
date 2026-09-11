@@ -11,6 +11,7 @@
     "db:migrate": "npm --workspace server run db:migrate",
     "db:seed": "npm --workspace server run db:seed",
     "build": "npm --workspace server run build && npm --workspace web run build",
+    "vercel-build": "npm --prefix web install && npm --prefix web run build",
     "test": "bash scripts/with-postgres.sh npm --workspace server run test:ci",
     "test:security": "bash scripts/with-postgres.sh npm --workspace server run test:security",
     "pentest": "npm run build && bash scripts/with-postgres.sh bash scripts/pentest-gate.sh",
